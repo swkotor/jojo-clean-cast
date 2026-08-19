@@ -35,18 +35,14 @@ func TrackEpisodeFiles() {
 	if _, err := os.Stat(config.AppConfig.Setup.ConfigDir); os.IsNotExist(err) {
 		os.MkdirAll(config.AppConfig.Setup.ConfigDir, 0755)
 	}
-	files, err := os.ReadDir(config.AppConfig.Setup.AudioDir)
-	if err != nil {
-		log.Error(err)
-	}
+	fileNames := ListAudioFileNames(config.AppConfig.Setup.AudioDir)
 
 	dbFiles := make([]string, 0)
 	db.Model(&models.EpisodePlaybackHistory{}).Pluck("YoutubeVideoId", &dbFiles)
 
 	missingFiles := make([]string, 0)
 	nonExistentDbFiles := make([]string, 0)
-	for _, file := range files {
-		filename := file.Name()
+	for _, filename := range fileNames {
 		if !common.IsValidFilename(filename) {
 			continue
 		}
@@ -64,8 +60,8 @@ func TrackEpisodeFiles() {
 
 	for _, dbFile := range dbFiles {
 		found := false
-		for _, file := range files {
-			if dbFile == file.Name()[:len(file.Name())-4] {
+		for _, filename := range fileNames {
+			if len(filename) > 4 && dbFile == filename[:len(filename)-4] {
 				found = true
 				break
 			}

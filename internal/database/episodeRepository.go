@@ -141,28 +141,62 @@ func GetEpisodeByVideoId(videoId string) (*models.PodcastEpisode, error) {
 	return &episode, nil
 }
 
+// FindFileWithId searches baseDir and its immediate subdirectories
+// (per-podcast folders) for a file named <videoId>.<ext>
 func FindFileWithId(baseDir, videoId string) string {
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		return ""
 	}
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), videoId+".") && !entry.IsDir() {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), videoId+".") {
 			return path.Join(baseDir, entry.Name())
+		}
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		subDir := path.Join(baseDir, entry.Name())
+		subEntries, err := os.ReadDir(subDir)
+		if err != nil {
+			continue
+		}
+		for _, sub := range subEntries {
+			if !sub.IsDir() && strings.HasPrefix(sub.Name(), videoId+".") {
+				return path.Join(subDir, sub.Name())
+			}
 		}
 	}
 	return ""
 }
 
 func FileExistsWithId(baseDir, videoId string) bool {
+	return FindFileWithId(baseDir, videoId) != ""
+}
+
+// ListAudioFileNames returns the basenames of all audio files in baseDir
+// and its immediate subdirectories
+func ListAudioFileNames(baseDir string) []string {
+	var names []string
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		return false
+		return names
 	}
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), videoId+".") && !entry.IsDir() {
-			return true
+		if !entry.IsDir() {
+			names = append(names, entry.Name())
+			continue
+		}
+		subEntries, err := os.ReadDir(path.Join(baseDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		for _, sub := range subEntries {
+			if !sub.IsDir() {
+				names = append(names, sub.Name())
+			}
 		}
 	}
-	return false
+	return names
 }

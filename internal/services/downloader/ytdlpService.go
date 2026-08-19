@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
+	"ikoyhn/podcast-sponsorblock/internal/services/common"
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/ntfy"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,6 +46,20 @@ func GetYoutubeVideo(youtubeVideoId string) <-chan struct{} {
 		title = episode.EpisodeName
 	}
 
+	// store episodes in a per-podcast folder named after the podcast
+	downloadDir := config.AppConfig.Setup.AudioDir
+	if episode != nil && episode.PodcastId != "" {
+		if p := database.GetPodcast(episode.PodcastId); p != nil {
+			if dirName := common.SanitizeDirName(p.DisplayName()); dirName != "" {
+				downloadDir = filepath.Join(downloadDir, dirName)
+			}
+		}
+	}
+	if mkErr := os.MkdirAll(downloadDir, 0o755); mkErr != nil {
+		log.Errorf("Could not create download dir %s: %v", downloadDir, mkErr)
+		downloadDir = config.AppConfig.Setup.AudioDir
+	}
+
 	categories := config.AppConfig.Ytdlp.SponsorBlockCategories
 	categories = strings.TrimSpace(categories)
 
@@ -56,7 +73,7 @@ func GetYoutubeVideo(youtubeVideoId string) <-chan struct{} {
 		NoPlaylist().
 		FFmpegLocation("/usr/bin/ffmpeg").
 		Continue().
-		Paths(config.AppConfig.Setup.AudioDir).
+		Paths(downloadDir).
 		ProgressFunc(4000*time.Millisecond, func(prog ytdlp.ProgressUpdate) {
 			ytdlpProgress(&etaNotified, prog, title)
 		}).

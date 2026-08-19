@@ -114,7 +114,11 @@ func Load() (*Config, error) {
 		AppConfig.Ytdlp.CookiesFile = path.Join(AppConfig.Setup.ConfigDir, AppConfig.Ytdlp.CookiesFile)
 	}
 	AppConfig.Setup.DbFile = path.Join(AppConfig.Setup.ConfigDir, "sqlite.db")
-	AppConfig.Setup.AudioDir = path.Join(AppConfig.Setup.ConfigDir, "audio")
+	if envAudioDir := os.Getenv("AUDIO_DIR"); envAudioDir != "" {
+		AppConfig.Setup.AudioDir = envAudioDir
+	} else {
+		AppConfig.Setup.AudioDir = path.Join(AppConfig.Setup.ConfigDir, "audio")
+	}
 
 	return &cfg, nil
 }

@@ -45,6 +45,27 @@ func ParseDuration(durationStr string) (time.Duration, error) {
 	return time.ParseDuration(durationStr)
 }
 
+// SanitizeDirName turns a podcast title into a safe directory name
+func SanitizeDirName(name string) string {
+	var b strings.Builder
+	for _, c := range name {
+		switch {
+		case unicode.IsLetter(c) || unicode.IsNumber(c):
+			b.WriteRune(c)
+		case c == ' ' || c == '-' || c == '_' || c == '.' || c == '(' || c == ')' || c == '\'' || c == '&' || c == ',':
+			b.WriteRune(c)
+		default:
+			// drop path separators and other unsafe characters
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	out = strings.Trim(out, ".")
+	if len(out) > 120 {
+		out = out[:120]
+	}
+	return out
+}
+
 func IsValidFilename(filename string) bool {
 	for _, c := range filename {
 		if !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '.' && c != '_' && c != '-' {
