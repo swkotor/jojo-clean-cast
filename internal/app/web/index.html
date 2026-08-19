@@ -214,6 +214,8 @@
   }
   .actions .apple:hover { filter: brightness(1.1); }
   .actions button:hover { background: var(--card-hover); }
+  .actions .autodl-on { color: var(--green); border-color: rgba(52,211,153,.4); }
+  .actions .autodl-off { color: var(--muted); }
   .actions .del { flex: 0 0 42px; color: var(--muted); }
   .actions .del:hover { color: var(--red); border-color: var(--red); }
 
@@ -302,6 +304,8 @@
 <script>
 const token = new URLSearchParams(location.search).get('token');
 const tok = token ? '?token=' + encodeURIComponent(token) : '';
+let publicUrl = '';
+fetch('/api/config' + tok).then(r => r.json()).then(c => { publicUrl = c.publicUrl || ''; load(); }).catch(() => {});
 
 function fmtDate(iso) {
   const d = new Date(iso);
@@ -362,8 +366,10 @@ async function load() {
           </div>
         </div>
         <div class="actions">
-          <a class="apple" href="${appleUrl}">Subscribe in Apple Podcasts</a>
-          <button onclick="copyFeed('${esc(feedUrl)}', this)">Copy RSS URL</button>
+          <a class="apple" href="${appleUrl}">${publicUrl ? 'Subscribe (local)' : 'Subscribe in Apple Podcasts'}</a>
+          ${publicUrl ? `<a class="apple" style="background:linear-gradient(135deg,#0891b2,#2563eb)" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${p.feedPath}${tok}">Subscribe (remote)</a>` : ''}
+          <button onclick="copyFeed('${esc(publicUrl ? publicUrl + p.feedPath + tok : feedUrl)}', this)">Copy RSS URL</button>
+          <button class="${p.autoDownload ? 'autodl-on' : 'autodl-off'}" title="Toggle automatic download of new episodes" onclick="toggleAutoDl('${esc(p.id)}', ${p.autoDownload})">Auto-DL: ${p.autoDownload ? 'ON' : 'OFF'}</button>
           <button class="del" title="Remove subscription" onclick="removePodcast('${esc(p.id)}', '${esc(p.name).replace(/'/g, "\\'")}')">✕</button>
         </div>
         <div class="episodes">
@@ -439,6 +445,16 @@ async function renamePodcast(id) {
   });
   if (res.ok) loadAll();
   else alert('Rename failed');
+}
+
+async function toggleAutoDl(id, current) {
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ autoDownload: !current })
+  });
+  if (res.ok) loadAll();
+  else alert('Failed to toggle auto-download');
 }
 
 async function downloadEpisode(videoId, btn) {

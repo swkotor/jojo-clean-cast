@@ -46,6 +46,7 @@ type dashboardPodcast struct {
 	Type          string             `json:"type"`
 	FeedPath      string             `json:"feedPath"`
 	EpisodeCount  int64              `json:"episodeCount"`
+	AutoDownload  bool               `json:"autoDownload"`
 	LastBuildDate string             `json:"lastBuildDate"`
 	Episodes      []dashboardEpisode `json:"episodes"`
 }
@@ -123,6 +124,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 				Type:          podcastType,
 				FeedPath:      feedPath,
 				EpisodeCount:  database.CountEpisodes(p.Id),
+				AutoDownload:  !p.AutoDownloadOff,
 				LastBuildDate: p.LastBuildDate,
 				Episodes:      dashEpisodes,
 			})
@@ -176,7 +178,8 @@ func registerDashboardRoutes(e *echo.Echo) {
 			return err
 		}
 		var req struct {
-			Name string `json:"name"`
+			Name         *string `json:"name"`
+			AutoDownload *bool   `json:"autoDownload"`
 		}
 		if err := c.Bind(&req); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
@@ -186,16 +189,38 @@ func registerDashboardRoutes(e *echo.Echo) {
 		if p == nil {
 			return echo.NewHTTPError(http.StatusNotFound, "Podcast not found")
 		}
-		name := strings.TrimSpace(req.Name)
-		if err := database.SetCustomName(id, name); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		if req.Name != nil {
+			name := strings.TrimSpace(*req.Name)
+			if err := database.SetCustomName(id, name); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			}
+			if name == "" {
+				events.Info("Feed name reverted to YouTube name for %s", p.PodcastName)
+			} else {
+				events.Info("Feed renamed: %s → %s", p.PodcastName, name)
+			}
 		}
-		if name == "" {
-			events.Info("Feed name reverted to YouTube name for %s", p.PodcastName)
-		} else {
-			events.Info("Feed renamed: %s → %s", p.PodcastName, name)
+		if req.AutoDownload != nil {
+			if err := database.SetAutoDownload(id, *req.AutoDownload); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			}
+			state := "enabled"
+			if !*req.AutoDownload {
+				state = "disabled"
+			}
+			events.Info("Auto-download %s for %s", state, p.DisplayName())
 		}
 		return c.NoContent(http.StatusNoContent)
+	})
+
+	// UI config (e.g. public tunnel URL for remote subscribe links)
+	e.GET("/api/config", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]string{
+			"publicUrl": strings.TrimRight(os.Getenv("PUBLIC_URL"), "/"),
+		})
 	})
 
 	// Trigger a download of one episode

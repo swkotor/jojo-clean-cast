@@ -33,6 +33,7 @@ type Podcast struct {
 	ArtistName      string           `json:"artist_name"`
 	Explicit        string           `json:"explicit"`
 	CustomName      string           `json:"custom_name"`
+	AutoDownloadOff bool             `json:"auto_download_off"`
 }
 
 // DisplayName returns the user-defined name if set, otherwise the YouTube name

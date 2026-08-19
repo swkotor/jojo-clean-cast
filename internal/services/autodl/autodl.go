@@ -115,8 +115,53 @@ func runOnce() {
 		return
 	}
 	for _, p := range podcasts {
+		if p.AutoDownloadOff {
+			continue
+		}
 		refreshPodcast(p.Id)
 		downloadRecent(p.Id)
+		cleanupServed(p.Id)
+	}
+}
+
+// cleanupServed deletes local audio files for recent episodes that have
+// already been served to a device (playback history exists) and were last
+// accessed more than the cleanup window ago. The playback-history row is
+// kept so the episode is not re-downloaded automatically.
+func cleanupServed(podcastId string) {
+	window := 72 * time.Hour
+	if v := os.Getenv("AUTO_CLEANUP_AFTER"); v != "" {
+		if strings.EqualFold(v, "off") {
+			return
+		}
+		if d, err := time.ParseDuration(v); err == nil && d >= time.Hour {
+			window = d
+		}
+	}
+	episodes, err := database.GetRecentEpisodes(podcastId, recentCount)
+	if err != nil {
+		return
+	}
+	audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+	for _, ep := range episodes {
+		if IsDownloading(ep.YoutubeVideoId) {
+			continue
+		}
+		h := database.GetPlaybackHistory(ep.YoutubeVideoId)
+		if h == nil {
+			continue // never served to a device yet
+		}
+		if time.Since(time.Unix(h.LastAccessDate, 0)) < window {
+			continue
+		}
+		filePath := database.FindFileWithId(audioDirAbs, ep.YoutubeVideoId)
+		if filePath == "" {
+			continue
+		}
+		if err := os.Remove(filePath); err == nil {
+			events.Info("Cleaned up served episode: %s (last accessed %s)",
+				ep.EpisodeName, time.Unix(h.LastAccessDate, 0).Format("Jan 2 15:04"))
+		}
 	}
 }
 
@@ -149,6 +194,10 @@ func downloadRecent(podcastId string) {
 			continue
 		}
 		if database.FileExistsWithId(audioDirAbs, ep.YoutubeVideoId) || IsDownloading(ep.YoutubeVideoId) {
+			continue
+		}
+		// already served to a device before (file was cleaned up) — don't re-download
+		if database.GetPlaybackHistory(ep.YoutubeVideoId) != nil {
 			continue
 		}
 		// sequential to avoid hammering YouTube

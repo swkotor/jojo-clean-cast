@@ -50,6 +50,22 @@ func SetCustomName(podcastId, name string) error {
 		Update("custom_name", name).Error
 }
 
+// SetAutoDownload enables/disables automatic downloads for a podcast
+func SetAutoDownload(podcastId string, enabled bool) error {
+	return db.Model(&models.Podcast{}).Where("id = ?", podcastId).
+		Update("auto_download_off", !enabled).Error
+}
+
+// GetPlaybackHistory returns the playback history row for a video, or nil
+func GetPlaybackHistory(videoId string) *models.EpisodePlaybackHistory {
+	var h models.EpisodePlaybackHistory
+	err := db.Where("youtube_video_id = ?", videoId).First(&h).Error
+	if err != nil {
+		return nil
+	}
+	return &h
+}
+
 // DeletePodcastAndEpisodes removes a podcast and all of its episode records
 func DeletePodcastAndEpisodes(podcastId string) error {
 	if err := db.Where("podcast_id = ?", podcastId).Delete(&models.PodcastEpisode{}).Error; err != nil {
