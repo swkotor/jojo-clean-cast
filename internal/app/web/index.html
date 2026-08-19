@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jojo-podcasts</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --card-hover: #20242f;
+    --border: #2a2e3b;
+    --text: #e8eaf0;
+    --muted: #8b90a0;
+    --accent: #8b5cf6;
+    --accent-hover: #7c3aed;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 32px 8px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header .logo {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--accent), #ec4899);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  header h1 { font-size: 24px; font-weight: 700; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+  .add-bar {
+    margin: 20px 32px;
+    display: flex;
+    gap: 10px;
+  }
+  .add-bar input {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+  }
+  .add-bar input:focus { border-color: var(--accent); }
+  .add-bar button {
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    padding: 12px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .add-bar button:hover { background: var(--accent-hover); }
+  .add-bar button:disabled { opacity: .5; cursor: wait; }
+  #status {
+    margin: 0 32px 8px;
+    font-size: 13px;
+    min-height: 18px;
+  }
+  #status.ok { color: var(--green); }
+  #status.err { color: var(--red); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 18px;
+    padding: 12px 32px 48px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-head {
+    display: flex;
+    gap: 14px;
+    padding: 16px;
+    align-items: flex-start;
+  }
+  .card-head img {
+    width: 72px; height: 72px;
+    border-radius: 12px;
+    object-fit: cover;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+  .card-head .info { flex: 1; min-width: 0; }
+  .card-head h2 {
+    font-size: 16px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: rgba(139, 92, 246, .15);
+    color: var(--accent);
+  }
+  .badge.channel { background: rgba(236, 72, 153, .15); color: #ec4899; }
+  .ep-count { color: var(--muted); font-size: 12px; }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    padding: 0 16px 14px;
+  }
+  .actions a, .actions button {
+    flex: 1;
+    text-align: center;
+    text-decoration: none;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 9px 4px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .actions .apple {
+    background: linear-gradient(135deg, #9333ea, #c026d3);
+    border: none;
+    color: white;
+  }
+  .actions .apple:hover { filter: brightness(1.1); }
+  .actions button:hover { background: var(--card-hover); }
+  .actions .del { flex: 0 0 42px; color: var(--muted); }
+  .actions .del:hover { color: var(--red); border-color: var(--red); }
+
+  .episodes { border-top: 1px solid var(--border); }
+  .episodes h3 {
+    font-size: 11px;
+    letter-spacing: .08em;
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 12px 16px 4px;
+  }
+  .ep {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+  .ep:last-child { padding-bottom: 14px; }
+  .ep .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .ep .dot.dl { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,.6); }
+  .ep .dot.nd { background: var(--border); }
+  .ep .title {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+  .ep .date { color: var(--muted); font-size: 11.5px; flex-shrink: 0; }
+  .ep .state { font-size: 10.5px; font-weight: 600; flex-shrink: 0; width: 82px; text-align: right; }
+  .ep .state.dl { color: var(--green); }
+  .ep .state.nd { color: var(--muted); }
+
+  .empty {
+    grid-column: 1/-1;
+    text-align: center;
+    color: var(--muted);
+    padding: 60px 0;
+  }
+  .toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 32px;
+  }
+  .toolbar button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .toolbar button:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🎙️</div>
+  <div>
+    <h1>jojo-podcasts</h1>
+    <div class="sub">YouTube → clean podcast feeds, sponsor-free</div>
+  </div>
+</header>
+
+<div class="add-bar">
+  <input id="input" placeholder="Paste a YouTube playlist/channel URL, playlist ID (PL…), channel ID (UC…), or @handle" onkeydown="if(event.key==='Enter')addPodcast()">
+  <button id="addBtn" onclick="addPodcast()">Add podcast</button>
+</div>
+<div id="status"></div>
+<div class="toolbar"><button onclick="load()">↻ Refresh</button></div>
+
+<div class="grid" id="grid"><div class="empty">Loading…</div></div>
+
+<script>
+const token = new URLSearchParams(location.search).get('token');
+const tok = token ? '?token=' + encodeURIComponent(token) : '';
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function esc(s) {
+  return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function load() {
+  const grid = document.getElementById('grid');
+  try {
+    const res = await fetch('/api/podcasts' + tok);
+    if (!res.ok) throw new Error(await res.text());
+    const pods = await res.json();
+    if (!pods.length) {
+      grid.innerHTML = '<div class="empty">No podcasts yet — add one above 👆</div>';
+      return;
+    }
+    grid.innerHTML = pods.map(p => {
+      const feedUrl = location.origin + p.feedPath + tok;
+      const appleUrl = 'podcast://' + location.host + p.feedPath + tok;
+      const eps = (p.episodes || []).map(e => `
+        <div class="ep">
+          <div class="dot ${e.downloaded ? 'dl' : 'nd'}"></div>
+          <div class="title" title="${esc(e.name)}">${esc(e.name)}</div>
+          <div class="date">${fmtDate(e.publishedDate)}</div>
+          <div class="state ${e.downloaded ? 'dl' : 'nd'}">${e.downloaded ? 'Downloaded' : 'Not downloaded'}</div>
+        </div>`).join('') || '<div class="ep"><div class="title" style="color:var(--muted)">No episodes tracked yet</div></div>';
+      return `
+      <div class="card">
+        <div class="card-head">
+          <img src="${esc(p.imageUrl)}" loading="lazy" onerror="this.style.visibility='hidden'">
+          <div class="info">
+            <h2>${esc(p.name)}</h2>
+            <div class="meta">
+              <span class="badge ${p.type === 'CHANNEL' ? 'channel' : ''}">${p.type}</span>
+              <span class="ep-count">${p.episodeCount} episodes</span>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <a class="apple" href="${appleUrl}">Subscribe in Apple Podcasts</a>
+          <button onclick="copyFeed('${esc(feedUrl)}', this)">Copy RSS URL</button>
+          <button class="del" title="Remove subscription" onclick="removePodcast('${esc(p.id)}', '${esc(p.name).replace(/'/g, "\\'")}')">✕</button>
+        </div>
+        <div class="episodes">
+          <h3>Recent episodes</h3>
+          ${eps}
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    grid.innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function addPodcast() {
+  const input = document.getElementById('input');
+  const btn = document.getElementById('addBtn');
+  const status = document.getElementById('status');
+  const val = input.value.trim();
+  if (!val) return;
+  btn.disabled = true;
+  status.className = '';
+  status.textContent = 'Adding — fetching metadata and episodes from YouTube, this can take a minute…';
+  try {
+    const res = await fetch('/api/podcasts' + tok, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: val })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.message || 'Failed to add podcast');
+    status.className = 'ok';
+    status.textContent = `Added "${body.name}" ✓`;
+    input.value = '';
+    load();
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function removePodcast(id, name) {
+  if (!confirm(`Remove "${name}" from jojo-podcasts? Downloaded audio files are kept.`)) return;
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, { method: 'DELETE' });
+  if (res.ok) load();
+  else alert('Failed to remove podcast');
+}
+
+function copyFeed(url, btn) {
+  navigator.clipboard.writeText(url).then(() => {
+    const old = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => btn.textContent = old, 1500);
+  });
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

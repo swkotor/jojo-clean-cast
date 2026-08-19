@@ -22,6 +22,8 @@ import (
 )
 
 func registerRoutes(e *echo.Echo) {
+	registerDashboardRoutes(e)
+
 	e.GET("/channel/:channelId", func(c echo.Context) error {
 		if err := checkAuthentication(c); err != nil {
 			return err

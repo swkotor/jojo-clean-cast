@@ -1,0 +1,234 @@
+package app
+
+import (
+	"embed"
+	"ikoyhn/podcast-sponsorblock/internal/config"
+	"ikoyhn/podcast-sponsorblock/internal/database"
+	"ikoyhn/podcast-sponsorblock/internal/models"
+	"ikoyhn/podcast-sponsorblock/internal/services/channel"
+	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
+	"ikoyhn/podcast-sponsorblock/internal/services/youtube"
+	"net/http"
+	"net/url"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	log "github.com/labstack/gommon/log"
+)
+
+//go:embed web/index.html
+var webFS embed.FS
+
+type dashboardEpisode struct {
+	VideoId       string `json:"videoId"`
+	Name          string `json:"name"`
+	PublishedDate string `json:"publishedDate"`
+	Downloaded    bool   `json:"downloaded"`
+	ImageUrl      string `json:"imageUrl"`
+}
+
+type dashboardPodcast struct {
+	Id            string             `json:"id"`
+	Name          string             `json:"name"`
+	ArtistName    string             `json:"artistName"`
+	Description   string             `json:"description"`
+	ImageUrl      string             `json:"imageUrl"`
+	Type          string             `json:"type"`
+	FeedPath      string             `json:"feedPath"`
+	EpisodeCount  int64              `json:"episodeCount"`
+	LastBuildDate string             `json:"lastBuildDate"`
+	Episodes      []dashboardEpisode `json:"episodes"`
+}
+
+type addPodcastRequest struct {
+	Input string `json:"input"`
+}
+
+var playlistIdRegex = regexp.MustCompile(`^(PL|UU|FL|OL|RD)[A-Za-z0-9_-]{10,}$`)
+var channelIdRegex = regexp.MustCompile(`^UC[A-Za-z0-9_-]{20,}$`)
+
+func registerDashboardRoutes(e *echo.Echo) {
+	// Serve the dashboard UI
+	e.GET("/", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		data, err := webFS.ReadFile("web/index.html")
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "UI not available")
+		}
+		return c.HTMLBlob(http.StatusOK, data)
+	})
+
+	// List all podcasts with their 5 most recent episodes + download status
+	e.GET("/api/podcasts", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		podcasts, err := database.GetAllPodcasts()
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+
+		audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+		result := make([]dashboardPodcast, 0, len(podcasts))
+		for _, p := range podcasts {
+			podcastType := database.GetEpisodeType(p.Id)
+			if podcastType == "" {
+				if channelIdRegex.MatchString(p.Id) {
+					podcastType = "CHANNEL"
+				} else {
+					podcastType = "PLAYLIST"
+				}
+			}
+			feedPath := "/rss/" + p.Id
+			if podcastType == "CHANNEL" {
+				feedPath = "/channel/" + p.Id
+			}
+
+			episodes, err := database.GetRecentEpisodes(p.Id, 5)
+			if err != nil {
+				log.Error(err)
+			}
+			dashEpisodes := make([]dashboardEpisode, 0, len(episodes))
+			for _, ep := range episodes {
+				dashEpisodes = append(dashEpisodes, dashboardEpisode{
+					VideoId:       ep.YoutubeVideoId,
+					Name:          ep.EpisodeName,
+					PublishedDate: ep.PublishedDate.Format(time.RFC3339),
+					Downloaded:    database.FileExistsWithId(audioDirAbs, ep.YoutubeVideoId),
+					ImageUrl:      ep.ImageUrl,
+				})
+			}
+
+			result = append(result, dashboardPodcast{
+				Id:            p.Id,
+				Name:          p.PodcastName,
+				ArtistName:    p.ArtistName,
+				Description:   p.Description,
+				ImageUrl:      p.ImageUrl,
+				Type:          podcastType,
+				FeedPath:      feedPath,
+				EpisodeCount:  database.CountEpisodes(p.Id),
+				LastBuildDate: p.LastBuildDate,
+				Episodes:      dashEpisodes,
+			})
+		}
+		return c.JSON(http.StatusOK, result)
+	})
+
+	// Add a new podcast by YouTube URL, playlist ID, channel ID, or @handle
+	e.POST("/api/podcasts", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		var req addPodcastRequest
+		if err := c.Bind(&req); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		}
+		id, podcastType, err := resolveInput(strings.TrimSpace(req.Input))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		host := handler(c.Request())
+		if podcastType == "CHANNEL" {
+			channel.BuildChannelRssFeed(id, &models.RssRequestParams{}, host)
+		} else {
+			playlist.BuildPlaylistRssFeed(id, host)
+		}
+
+		p := database.GetPodcast(id)
+		if p == nil {
+			return echo.NewHTTPError(http.StatusUnprocessableEntity,
+				"Could not create podcast — check the ID/URL and your YouTube API quota")
+		}
+		feedPath := "/rss/" + id
+		if podcastType == "CHANNEL" {
+			feedPath = "/channel/" + id
+		}
+		return c.JSON(http.StatusCreated, map[string]string{
+			"id":       id,
+			"name":     p.PodcastName,
+			"type":     podcastType,
+			"feedPath": feedPath,
+		})
+	})
+
+	// Remove a podcast subscription (episode records + podcast row; audio files kept)
+	e.DELETE("/api/podcasts/:id", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		id := c.Param("id")
+		if database.GetPodcast(id) == nil {
+			return echo.NewHTTPError(http.StatusNotFound, "Podcast not found")
+		}
+		if err := database.DeletePodcastAndEpisodes(id); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.NoContent(http.StatusNoContent)
+	})
+}
+
+// resolveInput turns a user-supplied string (URL, ID, or @handle) into a
+// podcast ID and type (PLAYLIST or CHANNEL)
+func resolveInput(input string) (string, string, error) {
+	if input == "" {
+		return "", "", echo.NewHTTPError(http.StatusBadRequest, "Input is empty")
+	}
+
+	// Full URL handling
+	if strings.Contains(input, "youtube.com") || strings.Contains(input, "youtu.be") {
+		raw := input
+		if !strings.HasPrefix(raw, "http") {
+			raw = "https://" + raw
+		}
+		u, err := url.Parse(raw)
+		if err != nil {
+			return "", "", echo.NewHTTPError(http.StatusBadRequest, "Could not parse URL")
+		}
+		// playlist link: ...?list=<id>
+		if list := u.Query().Get("list"); list != "" {
+			return list, "PLAYLIST", nil
+		}
+		// channel link: /channel/UC...
+		if strings.HasPrefix(u.Path, "/channel/") {
+			id := strings.Trim(strings.TrimPrefix(u.Path, "/channel/"), "/")
+			if channelIdRegex.MatchString(id) {
+				return id, "CHANNEL", nil
+			}
+		}
+		// handle link: /@handle
+		if strings.HasPrefix(u.Path, "/@") {
+			return resolveHandle(strings.Trim(strings.TrimPrefix(u.Path, "/"), "/"))
+		}
+		return "", "", echo.NewHTTPError(http.StatusBadRequest,
+			"Unsupported YouTube URL — use a playlist, channel, or @handle link")
+	}
+
+	// Raw values
+	if strings.HasPrefix(input, "@") {
+		return resolveHandle(input)
+	}
+	if channelIdRegex.MatchString(input) {
+		return input, "CHANNEL", nil
+	}
+	if playlistIdRegex.MatchString(input) {
+		return input, "PLAYLIST", nil
+	}
+	return "", "", echo.NewHTTPError(http.StatusBadRequest,
+		"Unrecognized input — provide a playlist ID (PL...), channel ID (UC...), @handle, or YouTube URL")
+}
+
+// resolveHandle looks up a channel ID for a @handle via the YouTube API
+func resolveHandle(handle string) (string, string, error) {
+	resp, err := youtube.YtService.Channels.List([]string{"id"}).ForHandle(handle).Do()
+	if err != nil || len(resp.Items) == 0 {
+		return "", "", echo.NewHTTPError(http.StatusBadRequest, "Could not resolve handle "+handle)
+	}
+	return resp.Items[0].Id, "CHANNEL", nil
+}
