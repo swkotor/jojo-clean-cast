@@ -17,6 +17,7 @@
     --green: #34d399;
     --amber: #fbbf24;
     --red: #f87171;
+    --cyan: #22d3ee;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -25,12 +26,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     min-height: 100vh;
   }
-  header {
-    padding: 28px 32px 8px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
+  header { padding: 28px 32px 8px; display: flex; align-items: center; gap: 14px; }
   header .logo {
     width: 44px; height: 44px;
     background: linear-gradient(135deg, var(--accent), #ec4899);
@@ -40,288 +36,183 @@
   }
   header h1 { font-size: 24px; font-weight: 700; }
   header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
-
-  .add-bar {
-    margin: 20px 32px 8px;
-    display: flex;
-    gap: 10px;
+  #stats { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  #remoteLink {
+    display: none; margin-left: auto; color: var(--accent); font-size: 13px;
+    text-decoration: none; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px;
   }
+
+  .add-bar { margin: 20px 32px 8px; display: flex; gap: 10px; }
   .add-bar input {
-    flex: 1;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 16px;
-    color: var(--text);
-    font-size: 14px;
-    outline: none;
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; color: var(--text); font-size: 14px; outline: none;
   }
   .add-bar input:focus { border-color: var(--accent); }
   .add-bar button {
-    background: var(--accent);
-    border: none;
-    border-radius: 10px;
-    color: white;
-    padding: 12px 22px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
+    background: var(--accent); border: none; border-radius: 10px; color: white;
+    padding: 12px 22px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
   }
   .add-bar button:hover { background: var(--accent-hover); }
   .add-bar button:disabled { opacity: .5; cursor: wait; }
-  #status {
-    margin: 0 32px 4px;
-    font-size: 13px;
-    min-height: 18px;
-  }
+  #status { margin: 0 32px 4px; font-size: 13px; min-height: 18px; }
   #status.ok { color: var(--green); }
   #status.err { color: var(--red); }
 
-  .toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 32px;
-    gap: 10px;
+  .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 0 32px; gap: 10px; }
+  .toolbar .right { display: flex; gap: 8px; }
+  .toolbar button, .toolbar a {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; text-decoration: none;
   }
-  .toolbar button, .toolbar .log-toggle {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .toolbar button:hover, .toolbar .log-toggle:hover { color: var(--text); }
-  .log-toggle .err-count {
-    color: var(--red);
-    font-weight: 700;
-  }
+  .toolbar button:hover, .toolbar a:hover { color: var(--text); }
+  .err-count { color: var(--red); font-weight: 700; }
 
   #logPanel {
-    margin: 10px 32px 0;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    max-height: 260px;
-    overflow-y: auto;
-    display: none;
-    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    font-size: 12px;
+    margin: 10px 32px 0; background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; max-height: 260px; overflow-y: auto; display: none;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px;
   }
   #logPanel.open { display: block; }
-  .log-line {
-    display: flex;
-    gap: 10px;
-    padding: 5px 14px;
-    border-bottom: 1px solid rgba(42,46,59,.5);
-  }
+  .log-line { display: flex; gap: 10px; padding: 5px 14px; border-bottom: 1px solid rgba(42,46,59,.5); }
   .log-line .t { color: var(--muted); flex-shrink: 0; }
   .log-line.error .m { color: var(--red); }
   .log-line.info .m { color: var(--text); }
   .log-empty { padding: 14px; color: var(--muted); }
 
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-    gap: 18px;
-    padding: 14px 32px 48px;
+  #browsePanel {
+    margin: 10px 32px 0; background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; display: none; max-height: 420px; overflow-y: auto;
   }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+  #browsePanel.open { display: block; }
+  #browsePanel h3 { font-size: 13px; padding: 14px 16px 6px; color: var(--muted); display:flex; justify-content:space-between; }
+  #browsePanel h3 button { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; }
+  .pl-row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-top: 1px solid rgba(42,46,59,.5); font-size: 13px; }
+  .pl-row img { width: 48px; height: 36px; border-radius: 6px; object-fit: cover; background: var(--border); }
+  .pl-row .t { flex: 1; }
+  .pl-row .c { color: var(--muted); font-size: 12px; }
+  .pl-row button {
+    background: var(--accent); border: none; border-radius: 8px; color: white;
+    padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
   }
-  .card-head {
-    display: flex;
-    gap: 14px;
-    padding: 16px;
-    align-items: flex-start;
-  }
-  .cover {
-    position: relative;
-    width: 72px; height: 72px;
-    flex-shrink: 0;
-    cursor: pointer;
-  }
-  .cover img {
-    width: 72px; height: 72px;
-    border-radius: 12px;
-    object-fit: cover;
-    background: var(--border);
-    display: block;
-  }
+  .pl-row button:disabled { opacity: .5; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 18px; padding: 14px 32px 48px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .card-head { display: flex; gap: 14px; padding: 16px; align-items: flex-start; }
+  .cover { position: relative; width: 72px; height: 72px; flex-shrink: 0; cursor: pointer; }
+  .cover img { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; background: var(--border); display: block; }
   .cover .cover-hint {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,.55);
-    border-radius: 12px;
-    color: white;
-    font-size: 18px;
-    opacity: 0;
-    transition: opacity .15s;
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.55); border-radius: 12px; color: white; font-size: 18px;
+    opacity: 0; transition: opacity .15s;
   }
   .cover:hover .cover-hint { opacity: 1; }
   .card-head .info { flex: 1; min-width: 0; }
   .card-head h2 {
-    font-size: 16px;
-    font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   }
-  .card-head h2 .rename {
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 13px;
-    margin-left: 6px;
-    border: none;
-    background: none;
-  }
+  .card-head h2 .rename { cursor: pointer; color: var(--muted); font-size: 13px; margin-left: 6px; border: none; background: none; }
   .card-head h2 .rename:hover { color: var(--accent); }
   .orig-name { color: var(--muted); font-size: 11.5px; margin-top: 2px; font-style: italic; }
-  .meta {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-top: 6px;
-    flex-wrap: wrap;
-  }
+  .meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
   .badge {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: .06em;
-    padding: 3px 8px;
-    border-radius: 20px;
-    background: rgba(139, 92, 246, .15);
-    color: var(--accent);
+    font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px;
+    border-radius: 20px; background: rgba(139, 92, 246, .15); color: var(--accent);
   }
   .badge.channel { background: rgba(236, 72, 153, .15); color: #ec4899; }
+  .badge.filter { background: rgba(34, 211, 238, .15); color: var(--cyan); }
   .ep-count { color: var(--muted); font-size: 12px; }
-  .sub-tick {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 20px;
-    cursor: pointer;
-    color: var(--muted);
-    border: 1px solid var(--border);
+  .chip {
+    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px;
+    cursor: pointer; color: var(--muted); border: 1px solid var(--border); background: none;
   }
-  .sub-tick.on {
-    color: var(--green);
-    border-color: rgba(52,211,153,.4);
-    background: rgba(52,211,153,.08);
-  }
-  .sub-tick:hover { border-color: var(--green); }
+  .chip:hover { color: var(--text); }
+  .chip.on { color: var(--green); border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.08); }
   .yt-link {
-    font-size: 11px;
-    font-weight: 600;
-    color: #f87171;
-    text-decoration: none;
-    padding: 3px 8px;
-    border: 1px solid rgba(248,113,113,.3);
-    border-radius: 20px;
+    font-size: 11px; font-weight: 600; color: #f87171; text-decoration: none;
+    padding: 3px 8px; border: 1px solid rgba(248,113,113,.3); border-radius: 20px;
   }
   .yt-link:hover { background: rgba(248,113,113,.12); }
 
-  .actions {
-    display: flex;
-    gap: 8px;
-    padding: 0 16px 14px;
-  }
+  .actions { display: flex; gap: 8px; padding: 0 16px 14px; flex-wrap: wrap; }
   .actions a, .actions button {
-    flex: 1;
-    text-align: center;
-    text-decoration: none;
-    font-size: 12.5px;
-    font-weight: 600;
-    padding: 9px 4px;
-    border-radius: 9px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
+    flex: 1; text-align: center; text-decoration: none; font-size: 12.5px; font-weight: 600;
+    padding: 9px 4px; border-radius: 9px; border: 1px solid var(--border);
+    background: transparent; color: var(--text); cursor: pointer; min-width: 100px;
   }
-  .actions .apple {
-    background: linear-gradient(135deg, #9333ea, #c026d3);
-    border: none;
-    color: white;
-  }
-  .actions .apple:hover { filter: brightness(1.1); }
+  .actions .apple { background: linear-gradient(135deg, #9333ea, #c026d3); border: none; color: white; }
+  .actions .remote { background: linear-gradient(135deg, #0891b2, #2563eb); border: none; color: white; }
+  .actions .apple:hover, .actions .remote:hover { filter: brightness(1.1); }
   .actions button:hover { background: var(--card-hover); }
   .actions .autodl-on { color: var(--green); border-color: rgba(52,211,153,.4); }
   .actions .autodl-off { color: var(--muted); }
-  .actions .del { flex: 0 0 42px; color: var(--muted); }
+  .actions .del { flex: 0 0 42px; min-width: 42px; color: var(--muted); }
   .actions .del:hover { color: var(--red); border-color: var(--red); }
 
   .episodes { border-top: 1px solid var(--border); }
   .episodes h3 {
-    font-size: 11px;
-    letter-spacing: .08em;
-    color: var(--muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    padding: 12px 16px 4px;
+    font-size: 11px; letter-spacing: .08em; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; padding: 12px 16px 4px; display: flex; justify-content: space-between; align-items: center;
   }
-  .ep {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 16px;
-    font-size: 13px;
-  }
+  .episodes h3 button { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 11px; font-weight: 600; }
+  .ep { display: flex; align-items: center; gap: 10px; padding: 7px 16px; font-size: 13px; }
   .ep:last-child { padding-bottom: 14px; }
-  .ep .dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
+  .ep .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .ep .dot.dl { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,.6); }
   .ep .dot.nd { background: var(--border); }
   .ep .dot.dling { background: var(--amber); box-shadow: 0 0 6px rgba(251,191,36,.6); animation: pulse 1.2s infinite; }
+  .ep .dot.fail { background: var(--red); box-shadow: 0 0 6px rgba(248,113,113,.6); }
   @keyframes pulse { 50% { opacity: .35; } }
-  .ep .title {
-    flex: 1;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    color: var(--text);
-  }
+  .ep .title { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); }
   .ep .date { color: var(--muted); font-size: 11.5px; flex-shrink: 0; }
   .ep-btn {
-    flex-shrink: 0;
-    font-size: 10.5px;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 7px;
-    border: 1px solid var(--border);
-    background: transparent;
-    cursor: pointer;
-    width: 92px;
-    text-align: center;
+    flex-shrink: 0; font-size: 10.5px; font-weight: 600; padding: 4px 10px;
+    border-radius: 7px; border: 1px solid var(--border); background: transparent;
+    cursor: pointer; width: 92px; text-align: center;
   }
   .ep-btn.download { color: var(--accent); border-color: rgba(139,92,246,.4); }
   .ep-btn.download:hover { background: rgba(139,92,246,.15); }
+  .ep-btn.retry { color: var(--red); border-color: rgba(248,113,113,.4); }
   .ep-btn.delete { color: var(--muted); }
   .ep-btn.delete:hover { color: var(--red); border-color: var(--red); }
   .ep-btn.busy { color: var(--amber); border-color: rgba(251,191,36,.4); cursor: default; }
 
-  .empty {
-    grid-column: 1/-1;
-    text-align: center;
-    color: var(--muted);
-    padding: 60px 0;
+  .empty { grid-column: 1/-1; text-align: center; color: var(--muted); padding: 60px 0; }
+
+  /* modal */
+  #modalWrap {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    z-index: 50; align-items: flex-start; justify-content: center; padding: 6vh 16px;
   }
+  #modalWrap.open { display: flex; }
+  #modal {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    width: 100%; max-width: 720px; max-height: 84vh; display: flex; flex-direction: column;
+  }
+  #modal .m-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+  #modal .m-head h2 { font-size: 16px; flex: 1; }
+  #modal .m-head input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; color: var(--text); font-size: 13px; width: 220px; outline: none;
+  }
+  #modal .m-head .close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+  #modal .m-body { overflow-y: auto; padding: 6px 0 12px; }
+  #modal .m-more { text-align: center; padding: 10px; }
+  #modal .m-more button {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 6px 18px; cursor: pointer; font-size: 12px;
+  }
+  .series-row { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid rgba(42,46,59,.5); font-size: 13px; }
+  .series-row .t { flex: 1; }
+  .series-row .c { color: var(--muted); font-size: 12px; }
+  .series-row button {
+    background: var(--accent); border: none; border-radius: 8px; color: white;
+    padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .m-custom { display: flex; gap: 8px; padding: 12px 18px; }
+  .m-custom input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; outline: none; }
+  .m-custom button { background: var(--accent); border: none; border-radius: 8px; color: white; padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -330,29 +221,48 @@
   <div>
     <h1>jojo-podcasts</h1>
     <div class="sub">YouTube → clean podcast feeds, sponsor-free</div>
+    <div id="stats"></div>
   </div>
-  <a id="remoteLink" href="#" target="_blank" style="display:none; margin-left:auto; color:var(--accent); font-size:13px; text-decoration:none; border:1px solid var(--border); border-radius:8px; padding:8px 14px;">Remote dashboard ↗</a>
+  <a id="remoteLink" href="#" target="_blank">Remote dashboard ↗</a>
 </header>
 
 <div class="add-bar">
-  <input id="input" placeholder="Paste a YouTube playlist/channel URL, playlist ID (PL…), channel ID (UC…), or @handle" onkeydown="if(event.key==='Enter')addPodcast()">
+  <input id="input" placeholder="Paste a YouTube playlist/channel URL, playlist ID (PL…), channel ID (UC…), @handle, or a …/playlists URL to browse" onkeydown="if(event.key==='Enter')addPodcast()">
   <button id="addBtn" onclick="addPodcast()">Add podcast</button>
 </div>
 <div id="status"></div>
 <div class="toolbar">
-  <button class="log-toggle" id="logToggle" onclick="toggleLog()">Activity log <span id="errCount" class="err-count"></span></button>
-  <button onclick="loadAll()">↻ Refresh</button>
+  <button id="logToggle" onclick="toggleLog()">Activity log <span id="errCount" class="err-count"></span></button>
+  <div class="right">
+    <a id="opmlLink" href="/opml" download>Export OPML</a>
+    <button onclick="loadAll()">↻ Refresh</button>
+  </div>
 </div>
 <div id="logPanel"></div>
+<div id="browsePanel"></div>
 
 <div class="grid" id="grid"><div class="empty">Loading…</div></div>
 <input type="file" id="coverFile" accept=".jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadCover(this)">
+
+<div id="modalWrap" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <div class="m-head">
+      <h2 id="modalTitle"></h2>
+      <input id="modalSearch" placeholder="Search episodes…" style="display:none" onkeydown="if(event.key==='Enter')searchEpisodes()">
+      <button class="close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="m-body" id="modalBody"></div>
+  </div>
+</div>
 
 <script>
 const token = new URLSearchParams(location.search).get('token');
 const tok = token ? '?token=' + encodeURIComponent(token) : '';
 let publicUrl = '';
-let remoteTok = tok; // query-string suffix for remote/tunnel links
+let remoteTok = tok;
+let coverVersion = Date.now();
+let coverPodcastId = null;
+
 fetch('/api/config' + tok).then(r => r.json()).then(c => {
   publicUrl = c.publicUrl || '';
   if (c.token) remoteTok = '?token=' + encodeURIComponent(c.token);
@@ -361,19 +271,40 @@ fetch('/api/config' + tok).then(r => r.json()).then(c => {
     link.href = publicUrl + '/' + remoteTok;
     link.style.display = 'inline-block';
   }
+  if (tok) document.getElementById('opmlLink').href = '/opml' + tok;
   load();
 }).catch(() => {});
 
 function fmtDate(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function fmtTime(iso) {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function ago(unixSec) {
+  const s = Math.floor(Date.now() / 1000) - unixSec;
+  if (s < 90) return 'just now';
+  if (s < 5400) return Math.round(s / 60) + 'm ago';
+  if (s < 129600) return Math.round(s / 3600) + 'h ago';
+  return Math.round(s / 86400) + 'd ago';
 }
 function esc(s) {
   return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function epRow(e) {
+  let btn, dotCls;
+  if (e.downloading) { btn = '<button class="ep-btn busy">Downloading…</button>'; dotCls = 'dling'; }
+  else if (e.downloaded) { btn = `<button class="ep-btn delete" onclick="deleteEpisode('${esc(e.videoId)}')">Delete</button>`; dotCls = 'dl'; }
+  else if (e.failedCount > 0) { btn = `<button class="ep-btn retry" title="${e.failedCount} failed attempt(s)" onclick="downloadEpisode('${esc(e.videoId)}', this)">Retry (${e.failedCount}✗)</button>`; dotCls = 'fail'; }
+  else { btn = `<button class="ep-btn download" onclick="downloadEpisode('${esc(e.videoId)}', this)">Download</button>`; dotCls = 'nd'; }
+  return `
+    <div class="ep">
+      <div class="dot ${dotCls}"></div>
+      <div class="title" title="${esc(e.name)}">${esc(e.name)}</div>
+      <div class="date">${fmtDate(e.publishedDate)}</div>
+      ${btn}
+    </div>`;
 }
 
 async function load() {
@@ -382,33 +313,20 @@ async function load() {
     const res = await fetch('/api/podcasts' + tok);
     if (!res.ok) throw new Error(await res.text());
     const pods = await res.json();
+    window._pods = pods;
     if (!pods.length) {
       grid.innerHTML = '<div class="empty">No podcasts yet — add one above 👆</div>';
       return;
     }
     grid.innerHTML = pods.map(p => {
       const feedUrl = location.origin + p.feedPath + tok;
-      const appleUrl = 'podcast://' + location.host + p.feedPath + tok;
-      const eps = (p.episodes || []).map(e => {
-        let btn;
-        if (e.downloading) {
-          btn = '<button class="ep-btn busy">Downloading…</button>';
-        } else if (e.downloaded) {
-          btn = `<button class="ep-btn delete" onclick="deleteEpisode('${esc(e.videoId)}')">Delete</button>`;
-        } else {
-          btn = `<button class="ep-btn download" onclick="downloadEpisode('${esc(e.videoId)}', this)">Download</button>`;
-        }
-        const dotCls = e.downloading ? 'dling' : (e.downloaded ? 'dl' : 'nd');
-        return `
-        <div class="ep">
-          <div class="dot ${dotCls}"></div>
-          <div class="title" title="${esc(e.name)}">${esc(e.name)}</div>
-          <div class="date">${fmtDate(e.publishedDate)}</div>
-          ${btn}
-        </div>`;
-      }).join('') || '<div class="ep"><div class="title" style="color:var(--muted)">No episodes tracked yet</div></div>';
-      const renameArg = esc(p.id);
+      const isVirtual = p.type === 'FILTER';
+      const ytId = isVirtual ? p.parentId : p.id;
+      const ytUrl = (p.type === 'CHANNEL') ? 'https://www.youtube.com/channel/' + esc(ytId) : 'https://www.youtube.com/playlist?list=' + esc(ytId);
+      const eps = (p.episodes || []).map(epRow).join('') || '<div class="ep"><div class="title" style="color:var(--muted)">No episodes tracked yet</div></div>';
       const origLine = p.customName ? `<div class="orig-name">YouTube: ${esc(p.originalName)}</div>` : '';
+      const filterLine = isVirtual ? `<div class="orig-name">filter: "${esc(p.titleFilter)}"</div>` : '';
+      const badgeCls = isVirtual ? 'filter' : (p.type === 'CHANNEL' ? 'channel' : '');
       return `
       <div class="card">
         <div class="card-head">
@@ -417,32 +335,33 @@ async function load() {
             <div class="cover-hint">✎</div>
           </div>
           <div class="info">
-            <h2>${esc(p.name)}<button class="rename" title="Rename feed" onclick="renamePodcast('${renameArg}')">✎</button></h2>
-            ${origLine}
+            <h2>${esc(p.name)}<button class="rename" title="Rename feed" onclick="renamePodcast('${esc(p.id)}')">✎</button></h2>
+            ${origLine}${filterLine}
             ${p.imageUrl.startsWith('/covers/') ? `<div class="orig-name"><a href="#" style="color:var(--muted)" onclick="resetCover('${esc(p.id)}');return false">↺ reset cover art</a></div>` : ''}
             <div class="meta">
-              <span class="badge ${p.type === 'CHANNEL' ? 'channel' : ''}">${p.type}</span>
-              <span class="sub-tick ${p.subscribed ? 'on' : ''}" title="Mark as subscribed on your devices" onclick="toggleSubscribed('${esc(p.id)}', ${p.subscribed})">${p.subscribed ? '✓ Subscribed' : '○ Not subscribed'}</span>
+              <span class="badge ${badgeCls}">${p.type}</span>
+              <span class="chip ${p.subscribed ? 'on' : ''}" title="Mark as subscribed on your devices" onclick="toggleSubscribed('${esc(p.id)}', ${p.subscribed})">${p.subscribed ? '✓ Subscribed' : '○ Not subscribed'}</span>
               <span class="ep-count">${p.episodeCount} episodes</span>
-              <a class="yt-link" target="_blank" rel="noopener" href="${p.type === 'CHANNEL' ? 'https://www.youtube.com/channel/' + esc(p.id) : 'https://www.youtube.com/playlist?list=' + esc(p.id)}" title="Open source ${p.type.toLowerCase()} on YouTube">▶ YouTube</a>
+              <a class="yt-link" target="_blank" rel="noopener" href="${ytUrl}">▶ YouTube</a>
+              <button class="chip ${p.sbCategories ? 'on' : ''}" title="SponsorBlock categories for this feed" onclick="editSbCategories('${esc(p.id)}', '${esc(p.sbCategories)}')">SB${p.sbCategories ? ': ' + esc(p.sbCategories) : ''}</button>
+              ${!isVirtual ? `<button class="chip" title="Create a filtered sub-feed from a recurring series in this feed" onclick="openSplit('${esc(p.id)}')">⑂ Split</button>` : ''}
               ${p.lastFeedFetch ? `<span class="ep-count" title="Last time a podcast app fetched this feed">· polled ${ago(p.lastFeedFetch)}</span>` : ''}
             </div>
           </div>
         </div>
         <div class="actions">
-          <a class="apple" href="${appleUrl}">${publicUrl ? 'Subscribe (local)' : 'Subscribe in Apple Podcasts'}</a>
-          ${publicUrl ? `<a class="apple" style="background:linear-gradient(135deg,#0891b2,#2563eb)" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${p.feedPath}${remoteTok}">Subscribe (remote)</a>` : ''}
+          <a class="apple" href="podcast://${location.host}${p.feedPath}${tok}">${publicUrl ? 'Subscribe (local)' : 'Subscribe in Apple Podcasts'}</a>
+          ${publicUrl ? `<a class="remote" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${p.feedPath}${remoteTok}">Subscribe (remote)</a>` : ''}
           <button onclick="copyFeed('${esc(publicUrl ? publicUrl + p.feedPath + remoteTok : feedUrl)}', this)">Copy RSS URL</button>
           <button class="${p.autoDownload ? 'autodl-on' : 'autodl-off'}" title="Toggle automatic download of new episodes" onclick="toggleAutoDl('${esc(p.id)}', ${p.autoDownload})">Auto-DL: ${p.autoDownload ? 'ON' : 'OFF'}</button>
           <button class="del" title="Remove subscription" onclick="removePodcast('${esc(p.id)}', '${esc(p.name).replace(/'/g, "\\'")}')">✕</button>
         </div>
         <div class="episodes">
-          <h3>Recent episodes</h3>
+          <h3>Recent episodes <button onclick="openBrowser('${esc(p.id)}')">All episodes →</button></h3>
           ${eps}
         </div>
       </div>`;
     }).join('');
-    window._pods = pods;
   } catch (e) {
     grid.innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + '</div>';
   }
@@ -459,14 +378,23 @@ async function loadEvents() {
     panel.innerHTML = events.length
       ? events.map(e => `<div class="log-line ${e.level}"><span class="t">${fmtTime(e.time)}</span><span class="m">${esc(e.message)}</span></div>`).join('')
       : '<div class="log-empty">No activity yet</div>';
-  } catch (e) { /* panel is best-effort */ }
+  } catch (e) {}
 }
 
-function loadAll() { load(); loadEvents(); }
-
-function toggleLog() {
-  document.getElementById('logPanel').classList.toggle('open');
+async function loadStats() {
+  try {
+    const res = await fetch('/api/stats' + tok);
+    if (!res.ok) return;
+    const s = await res.json();
+    const gb = (s.storedBytes / 1e9).toFixed(1);
+    const hrs = (s.totalSkippedSeconds / 3600).toFixed(1);
+    document.getElementById('stats').textContent =
+      `${s.storedFiles} episodes on disk · ${gb} GB · SponsorBlock has skipped ${hrs}h of sponsors for you`;
+  } catch (e) {}
 }
+
+function loadAll() { load(); loadEvents(); loadStats(); }
+function toggleLog() { document.getElementById('logPanel').classList.toggle('open'); }
 
 async function addPodcast() {
   const input = document.getElementById('input');
@@ -474,6 +402,10 @@ async function addPodcast() {
   const status = document.getElementById('status');
   const val = input.value.trim();
   if (!val) return;
+
+  // channel playlists URL → browse mode
+  if (/\/playlists\/?$/.test(val)) return browsePlaylists(val);
+
   btn.disabled = true;
   status.className = '';
   status.textContent = 'Adding — fetching metadata and episodes from YouTube, this can take a minute…';
@@ -497,102 +429,189 @@ async function addPodcast() {
   }
 }
 
+async function browsePlaylists(url) {
+  const status = document.getElementById('status');
+  const panel = document.getElementById('browsePanel');
+  status.className = '';
+  status.textContent = 'Looking up channel playlists…';
+  try {
+    const res = await fetch('/api/browse-playlists' + tok, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: url })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.message || 'Failed to list playlists');
+    status.textContent = '';
+    panel.classList.add('open');
+    panel.innerHTML = `<h3>Playlists found (${body.length}) <button onclick="closeBrowse()">✕ close</button></h3>` +
+      (body.length ? body.map(pl => `
+        <div class="pl-row">
+          <img src="${esc(pl.thumbnail)}" loading="lazy" onerror="this.style.visibility='hidden'">
+          <div class="t">${esc(pl.title)}</div>
+          <div class="c">${pl.count} videos</div>
+          <button onclick="subscribePlaylist('${esc(pl.id)}', this)">Subscribe</button>
+        </div>`).join('') : '<div class="log-empty">No playlists on this channel</div>');
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = e.message;
+  }
+}
+function closeBrowse() {
+  const p = document.getElementById('browsePanel');
+  p.classList.remove('open');
+  p.innerHTML = '';
+}
+async function subscribePlaylist(id, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  try {
+    const res = await fetch('/api/podcasts' + tok, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: id })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.message || 'Failed');
+    btn.textContent = 'Added ✓';
+    loadAll();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Subscribe';
+    alert(e.message);
+  }
+}
+
+/* ---- episode browser modal ---- */
+let browserId = null, browserOffset = 0;
+function openBrowser(id) {
+  browserId = id; browserOffset = 0;
+  const p = (window._pods || []).find(x => x.id === id);
+  document.getElementById('modalTitle').textContent = p ? p.name : 'Episodes';
+  const s = document.getElementById('modalSearch');
+  s.style.display = 'inline-block'; s.value = '';
+  document.getElementById('modalBody').innerHTML = '<div class="log-empty">Loading…</div>';
+  document.getElementById('modalWrap').classList.add('open');
+  fetchEpisodes(false);
+}
+function searchEpisodes() { browserOffset = 0; fetchEpisodes(false); }
+async function fetchEpisodes(append) {
+  const q = document.getElementById('modalSearch').value.trim();
+  const body = document.getElementById('modalBody');
+  const res = await fetch(`/api/podcasts/${encodeURIComponent(browserId)}/episodes${tok ? tok + '&' : '?'}q=${encodeURIComponent(q)}&offset=${browserOffset}&limit=50`);
+  if (!res.ok) { body.innerHTML = '<div class="log-empty">Failed to load episodes</div>'; return; }
+  const data = await res.json();
+  const rows = (data.episodes || []).map(epRow).join('');
+  const shown = browserOffset + (data.episodes || []).length;
+  const more = shown < data.total ? `<div class="m-more"><button onclick="browserOffset=${shown};fetchEpisodes(true)">Load more (${shown}/${data.total})</button></div>` : `<div class="m-more" style="color:var(--muted);font-size:12px">${data.total} episodes</div>`;
+  if (append) {
+    body.querySelector('.m-more')?.remove();
+    body.insertAdjacentHTML('beforeend', rows + more);
+  } else {
+    body.innerHTML = (rows || '<div class="log-empty">No matching episodes</div>') + more;
+  }
+}
+function closeModal() {
+  document.getElementById('modalWrap').classList.remove('open');
+  document.getElementById('modalBody').innerHTML = '';
+}
+
+/* ---- split (filtered sub-feed) ---- */
+async function openSplit(id) {
+  const p = (window._pods || []).find(x => x.id === id);
+  document.getElementById('modalTitle').textContent = 'Split "' + (p ? p.name : '') + '" into a filtered feed';
+  document.getElementById('modalSearch').style.display = 'none';
+  const body = document.getElementById('modalBody');
+  body.innerHTML = '<div class="log-empty">Detecting recurring series…</div>';
+  document.getElementById('modalWrap').classList.add('open');
+  const res = await fetch(`/api/podcasts/${encodeURIComponent(id)}/series` + tok);
+  const series = res.ok ? await res.json() : [];
+  const rows = (series || []).map(s => `
+    <div class="series-row">
+      <div class="t">${esc(s.name)}</div>
+      <div class="c">${s.count} episodes</div>
+      <button onclick="createSplit('${esc(id)}', '${esc(s.name).replace(/'/g, "\\'")}', this)">Create feed</button>
+    </div>`).join('');
+  body.innerHTML =
+    `<div class="m-custom"><input id="customFilter" placeholder="…or type a custom title filter (case-insensitive substring)"><button onclick="createSplit('${esc(id)}', document.getElementById('customFilter').value, this)">Create feed</button></div>` +
+    (rows || '<div class="log-empty">No recurring series detected — use a custom filter above</div>');
+}
+async function createSplit(parentId, filter, btn) {
+  filter = (filter || '').trim();
+  if (!filter) return;
+  btn.disabled = true;
+  const res = await fetch(`/api/podcasts/${encodeURIComponent(parentId)}/split` + tok, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filter })
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) { btn.disabled = false; alert(body.message || 'Failed to create filtered feed'); return; }
+  closeModal();
+  loadAll();
+}
+
+/* ---- misc actions ---- */
+function pickCover(id) { coverPodcastId = id; document.getElementById('coverFile').click(); }
+async function uploadCover(input) {
+  if (!input.files.length || !coverPodcastId) return;
+  const fd = new FormData();
+  fd.append('image', input.files[0]);
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(coverPodcastId) + '/cover' + tok, { method: 'POST', body: fd });
+  input.value = '';
+  if (res.ok) { coverVersion = Date.now(); loadAll(); }
+  else { const b = await res.json().catch(() => ({})); alert(b.message || 'Failed to upload cover art'); }
+}
+async function resetCover(id) {
+  if (!confirm('Revert to the original YouTube cover art?')) return;
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + '/cover' + tok, { method: 'DELETE' });
+  if (res.ok) { coverVersion = Date.now(); loadAll(); }
+}
+async function patchPodcast(id, payload) {
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) loadAll();
+  else alert('Update failed');
+}
 async function renamePodcast(id) {
   const p = (window._pods || []).find(x => x.id === id);
   const current = p ? (p.customName || p.originalName) : '';
   const name = prompt('New feed name (leave empty to revert to the YouTube name):', current);
   if (name === null) return;
-  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: name })
-  });
-  if (res.ok) loadAll();
-  else alert('Rename failed');
+  patchPodcast(id, { name });
 }
-
-let coverVersion = Date.now();
-let coverPodcastId = null;
-
-function pickCover(id) {
-  coverPodcastId = id;
-  document.getElementById('coverFile').click();
+function editSbCategories(id, current) {
+  const cats = prompt(
+    'SponsorBlock categories for this feed (comma-separated).\nOptions: sponsor, selfpromo, interaction, intro, outro, preview, music_offtopic, filler\nLeave empty to use the global default.',
+    current || '');
+  if (cats === null) return;
+  patchPodcast(id, { sbCategories: cats });
 }
-
-async function uploadCover(input) {
-  if (!input.files.length || !coverPodcastId) return;
-  const fd = new FormData();
-  fd.append('image', input.files[0]);
-  const res = await fetch('/api/podcasts/' + encodeURIComponent(coverPodcastId) + '/cover' + tok, {
-    method: 'POST',
-    body: fd
-  });
-  input.value = '';
-  if (res.ok) { coverVersion = Date.now(); loadAll(); }
-  else {
-    const body = await res.json().catch(() => ({}));
-    alert(body.message || 'Failed to upload cover art');
-  }
-}
-
-async function resetCover(id) {
-  if (!confirm('Revert to the original YouTube cover art?')) return;
-  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + '/cover' + tok, { method: 'DELETE' });
-  if (res.ok) { coverVersion = Date.now(); loadAll(); }
-  else alert('Failed to reset cover art');
-}
-
-function ago(unixSec) {
-  const s = Math.floor(Date.now() / 1000) - unixSec;
-  if (s < 90) return 'just now';
-  if (s < 5400) return Math.round(s / 60) + 'm ago';
-  if (s < 129600) return Math.round(s / 3600) + 'h ago';
-  return Math.round(s / 86400) + 'd ago';
-}
-
-async function toggleSubscribed(id, current) {
-  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subscribed: !current })
-  });
-  if (res.ok) loadAll();
-}
-
-async function toggleAutoDl(id, current) {
-  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ autoDownload: !current })
-  });
-  if (res.ok) loadAll();
-  else alert('Failed to toggle auto-download');
-}
+function toggleSubscribed(id, current) { patchPodcast(id, { subscribed: !current }); }
+function toggleAutoDl(id, current) { patchPodcast(id, { autoDownload: !current }); }
 
 async function downloadEpisode(videoId, btn) {
   btn.textContent = 'Starting…';
   btn.className = 'ep-btn busy';
   const res = await fetch('/api/episodes/' + encodeURIComponent(videoId) + '/download' + tok, { method: 'POST' });
-  if (!res.ok) {
-    alert('Failed to start download');
-  }
+  if (!res.ok) alert('Failed to start download');
   setTimeout(loadAll, 2000);
 }
-
 async function deleteEpisode(videoId) {
   if (!confirm('Delete the downloaded audio file for this episode? It can be re-downloaded any time.')) return;
   const res = await fetch('/api/episodes/' + encodeURIComponent(videoId) + '/file' + tok, { method: 'DELETE' });
   if (res.ok) loadAll();
   else alert('Failed to delete file');
 }
-
 async function removePodcast(id, name) {
   if (!confirm(`Remove "${name}" from jojo-podcasts? Downloaded audio files are kept.`)) return;
   const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, { method: 'DELETE' });
   if (res.ok) loadAll();
   else alert('Failed to remove podcast');
 }
-
 function copyFeed(url, btn) {
   navigator.clipboard.writeText(url).then(() => {
     const old = btn.textContent;

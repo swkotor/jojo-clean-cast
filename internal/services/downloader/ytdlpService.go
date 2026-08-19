@@ -46,13 +46,16 @@ func GetYoutubeVideo(youtubeVideoId string) <-chan struct{} {
 		title = episode.EpisodeName
 	}
 
-	// store episodes in a per-podcast folder named after the podcast
+	// store episodes in a per-podcast folder named after the podcast, and
+	// honor a per-podcast SponsorBlock category override if one is set
 	downloadDir := config.AppConfig.Setup.AudioDir
+	sbOverride := ""
 	if episode != nil && episode.PodcastId != "" {
 		if p := database.GetPodcast(episode.PodcastId); p != nil {
 			if dirName := common.SanitizeDirName(p.DisplayName()); dirName != "" {
 				downloadDir = filepath.Join(downloadDir, dirName)
 			}
+			sbOverride = p.SponsorblockCategories
 		}
 	}
 	if mkErr := os.MkdirAll(downloadDir, 0o755); mkErr != nil {
@@ -61,6 +64,9 @@ func GetYoutubeVideo(youtubeVideoId string) <-chan struct{} {
 	}
 
 	categories := config.AppConfig.Ytdlp.SponsorBlockCategories
+	if sbOverride != "" {
+		categories = sbOverride
+	}
 	categories = strings.TrimSpace(categories)
 
 	var etaNotified uint32 = 0

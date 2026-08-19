@@ -7,6 +7,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/services/channel"
 	"ikoyhn/podcast-sponsorblock/internal/services/common"
 	"ikoyhn/podcast-sponsorblock/internal/services/downloader"
+	"ikoyhn/podcast-sponsorblock/internal/services/filterfeed"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
 	"ikoyhn/podcast-sponsorblock/internal/services/sponsorblock"
 	"net"
@@ -45,7 +46,12 @@ func registerRoutes(e *echo.Echo) {
 		validateQueryParams(c)
 		playlistId := strings.Split(c.Param("youtubePlaylistId"), "&")[0]
 		database.TouchFeedFetch(playlistId, time.Now().Unix())
-		data := playlist.BuildPlaylistRssFeed(playlistId, handler(c.Request()))
+		var data []byte
+		if strings.Contains(playlistId, "~") {
+			data = filterfeed.BuildFilteredRssFeed(playlistId, handler(c.Request()))
+		} else {
+			data = playlist.BuildPlaylistRssFeed(playlistId, handler(c.Request()))
+		}
 		c.Response().Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
 		c.Response().Header().Set("Content-Length", strconv.Itoa(len(data)))
 		c.Response().Header().Del("Transfer-Encoding")

@@ -37,6 +37,17 @@ type Podcast struct {
 	CustomImage     string           `json:"custom_image"`
 	Subscribed      bool             `json:"subscribed"`
 	LastFeedFetch   int64            `json:"last_feed_fetch"`
+	// Filtered sub-feed support: a "virtual" podcast that republishes a
+	// title-filtered subset of its parent's episodes
+	ParentId    string `json:"parent_id"`
+	TitleFilter string `json:"title_filter"`
+	// Per-podcast SponsorBlock category override (comma-separated)
+	SponsorblockCategories string `json:"sponsorblock_categories"`
+}
+
+// IsVirtual reports whether this podcast is a filtered sub-feed
+func (p *Podcast) IsVirtual() bool {
+	return p.ParentId != ""
 }
 
 // DisplayName returns the user-defined name if set, otherwise the YouTube name
