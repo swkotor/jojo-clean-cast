@@ -223,6 +223,16 @@
     background: rgba(52,211,153,.08);
   }
   .sub-tick:hover { border-color: var(--green); }
+  .yt-link {
+    font-size: 11px;
+    font-weight: 600;
+    color: #f87171;
+    text-decoration: none;
+    padding: 3px 8px;
+    border: 1px solid rgba(248,113,113,.3);
+    border-radius: 20px;
+  }
+  .yt-link:hover { background: rgba(248,113,113,.12); }
 
   .actions {
     display: flex;
@@ -414,6 +424,7 @@ async function load() {
               <span class="badge ${p.type === 'CHANNEL' ? 'channel' : ''}">${p.type}</span>
               <span class="sub-tick ${p.subscribed ? 'on' : ''}" title="Mark as subscribed on your devices" onclick="toggleSubscribed('${esc(p.id)}', ${p.subscribed})">${p.subscribed ? '✓ Subscribed' : '○ Not subscribed'}</span>
               <span class="ep-count">${p.episodeCount} episodes</span>
+              <a class="yt-link" target="_blank" rel="noopener" href="${p.type === 'CHANNEL' ? 'https://www.youtube.com/channel/' + esc(p.id) : 'https://www.youtube.com/playlist?list=' + esc(p.id)}" title="Open source ${p.type.toLowerCase()} on YouTube">▶ YouTube</a>
               ${p.lastFeedFetch ? `<span class="ep-count" title="Last time a podcast app fetched this feed">· polled ${ago(p.lastFeedFetch)}</span>` : ''}
             </div>
           </div>
