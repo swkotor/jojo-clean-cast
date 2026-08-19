@@ -1,6 +1,7 @@
 package autodl
 
 import (
+	"context"
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/models"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	log "github.com/labstack/gommon/log"
+	"github.com/lrstanley/go-ytdlp"
 )
 
 // tracks in-progress downloads (manual and automatic)
@@ -83,14 +85,43 @@ func Start() {
 	events.Info("Auto-download enabled — checking for new episodes every %v", interval)
 
 	go func() {
+		// keep yt-dlp on the nightly channel — YouTube changes frequently
+		// and stale versions cause HTTP 403 errors (ikoyhn/clean-cast#112)
+		updateYtdlp()
 		// initial check shortly after startup
 		time.Sleep(30 * time.Second)
 		runOnce()
 		ticker := time.NewTicker(interval)
+		lastUpdate := time.Now()
 		for range ticker.C {
+			if time.Since(lastUpdate) > 24*time.Hour {
+				updateYtdlp()
+				lastUpdate = time.Now()
+			}
 			runOnce()
 		}
 	}()
+}
+
+func updateYtdlp() {
+	defer func() {
+		if r := recover(); r != nil {
+			events.Error("yt-dlp update crashed: %v", r)
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	r, err := ytdlp.New().UpdateTo(ctx, "nightly")
+	if err != nil {
+		events.Error("yt-dlp self-update failed: %v", err)
+		return
+	}
+	out := strings.TrimSpace(r.Stdout)
+	if idx := strings.LastIndex(out, "\n"); idx >= 0 {
+		out = out[idx+1:]
+	}
+	events.Info("yt-dlp update: %s", out)
+	log.Infof("[AUTODL] %s", out)
 }
 
 // CheckPodcast refreshes one podcast and downloads its recent episodes (async)
