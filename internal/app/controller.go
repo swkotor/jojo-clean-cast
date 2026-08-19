@@ -9,6 +9,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/services/downloader"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
 	"ikoyhn/podcast-sponsorblock/internal/services/sponsorblock"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -185,12 +186,34 @@ func handler(r *http.Request) string {
 	return url
 }
 
+// isLocalRequest reports whether a request came directly from the local
+// network (not through Cloudflare or any other proxy)
+func isLocalRequest(c echo.Context) bool {
+	r := c.Request()
+	// Anything routed through Cloudflare (or another proxy) is not local
+	if r.Header.Get("Cf-Connecting-Ip") != "" || r.Header.Get("Cf-Ray") != "" ||
+		r.Header.Get("X-Forwarded-For") != "" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
+}
+
 func checkAuthentication(c echo.Context) error {
 	tokenConfigured := config.AppConfig.Authentication.Token != ""
 	basicConfigured := config.AppConfig.Authentication.BasicAuth.Password != ""
 
 	// If no authentication configured, allow through
 	if !tokenConfigured && !basicConfigured {
+		return nil
+	}
+
+	// Requests from the local network never need authentication
+	if isLocalRequest(c) {
 		return nil
 	}
 

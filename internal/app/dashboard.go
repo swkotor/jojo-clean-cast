@@ -218,9 +218,15 @@ func registerDashboardRoutes(e *echo.Echo) {
 		if err := checkAuthentication(c); err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, map[string]string{
+		resp := map[string]string{
 			"publicUrl": strings.TrimRight(os.Getenv("PUBLIC_URL"), "/"),
-		})
+		}
+		// Only reveal the token to local-network clients, so the local
+		// dashboard can build remote (tunnel) links that include it
+		if isLocalRequest(c) {
+			resp["token"] = config.AppConfig.Authentication.Token
+		}
+		return c.JSON(http.StatusOK, resp)
 	})
 
 	// Trigger a download of one episode

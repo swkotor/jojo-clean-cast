@@ -286,6 +286,7 @@
     <h1>jojo-podcasts</h1>
     <div class="sub">YouTube → clean podcast feeds, sponsor-free</div>
   </div>
+  <a id="remoteLink" href="#" target="_blank" style="display:none; margin-left:auto; color:var(--accent); font-size:13px; text-decoration:none; border:1px solid var(--border); border-radius:8px; padding:8px 14px;">Remote dashboard ↗</a>
 </header>
 
 <div class="add-bar">
@@ -305,7 +306,17 @@
 const token = new URLSearchParams(location.search).get('token');
 const tok = token ? '?token=' + encodeURIComponent(token) : '';
 let publicUrl = '';
-fetch('/api/config' + tok).then(r => r.json()).then(c => { publicUrl = c.publicUrl || ''; load(); }).catch(() => {});
+let remoteTok = tok; // query-string suffix for remote/tunnel links
+fetch('/api/config' + tok).then(r => r.json()).then(c => {
+  publicUrl = c.publicUrl || '';
+  if (c.token) remoteTok = '?token=' + encodeURIComponent(c.token);
+  const link = document.getElementById('remoteLink');
+  if (publicUrl && remoteTok) {
+    link.href = publicUrl + '/' + remoteTok;
+    link.style.display = 'inline-block';
+  }
+  load();
+}).catch(() => {});
 
 function fmtDate(iso) {
   const d = new Date(iso);
@@ -367,8 +378,8 @@ async function load() {
         </div>
         <div class="actions">
           <a class="apple" href="${appleUrl}">${publicUrl ? 'Subscribe (local)' : 'Subscribe in Apple Podcasts'}</a>
-          ${publicUrl ? `<a class="apple" style="background:linear-gradient(135deg,#0891b2,#2563eb)" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${p.feedPath}${tok}">Subscribe (remote)</a>` : ''}
-          <button onclick="copyFeed('${esc(publicUrl ? publicUrl + p.feedPath + tok : feedUrl)}', this)">Copy RSS URL</button>
+          ${publicUrl ? `<a class="apple" style="background:linear-gradient(135deg,#0891b2,#2563eb)" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${p.feedPath}${remoteTok}">Subscribe (remote)</a>` : ''}
+          <button onclick="copyFeed('${esc(publicUrl ? publicUrl + p.feedPath + remoteTok : feedUrl)}', this)">Copy RSS URL</button>
           <button class="${p.autoDownload ? 'autodl-on' : 'autodl-off'}" title="Toggle automatic download of new episodes" onclick="toggleAutoDl('${esc(p.id)}', ${p.autoDownload})">Auto-DL: ${p.autoDownload ? 'ON' : 'OFF'}</button>
           <button class="del" title="Remove subscription" onclick="removePodcast('${esc(p.id)}', '${esc(p.name).replace(/'/g, "\\'")}')">✕</button>
         </div>
