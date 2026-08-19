@@ -229,6 +229,7 @@
 <div class="add-bar">
   <input id="input" placeholder="Paste a YouTube playlist/channel URL, playlist ID (PL…), channel ID (UC…), @handle, or a …/playlists URL to browse" onkeydown="if(event.key==='Enter')addPodcast()">
   <button id="addBtn" onclick="addPodcast()">Add podcast</button>
+  <button style="background:#0891b2" title="List a channel's podcasts & playlists so you can subscribe individually or in bulk" onclick="browsePlaylists(document.getElementById('input').value.trim())">Browse channel</button>
 </div>
 <div id="status"></div>
 <div class="toolbar">
@@ -312,7 +313,16 @@ async function load() {
   try {
     const res = await fetch('/api/podcasts' + tok);
     if (!res.ok) throw new Error(await res.text());
-    const pods = await res.json();
+    let pods = await res.json();
+    // nest filtered sub-feeds directly after their parent
+    const parents = pods.filter(p => !p.parentId);
+    const ordered = [];
+    for (const par of parents) {
+      ordered.push(par);
+      for (const child of pods.filter(p => p.parentId === par.id)) ordered.push(child);
+    }
+    for (const orphan of pods.filter(p => p.parentId && !parents.some(x => x.id === p.parentId))) ordered.push(orphan);
+    pods = ordered;
     window._pods = pods;
     if (!pods.length) {
       grid.innerHTML = '<div class="empty">No podcasts yet — add one above 👆</div>';
@@ -429,11 +439,22 @@ async function addPodcast() {
   }
 }
 
+function plRow(pl) {
+  return `
+    <div class="pl-row" data-plid="${esc(pl.id)}">
+      <img src="${esc(pl.thumbnail)}" loading="lazy" onerror="this.style.visibility='hidden'">
+      <div class="t">${esc(pl.title)}</div>
+      <div class="c">${pl.count} videos</div>
+      <button onclick="subscribePlaylist('${esc(pl.id)}', this)">Subscribe</button>
+    </div>`;
+}
+
 async function browsePlaylists(url) {
   const status = document.getElementById('status');
   const panel = document.getElementById('browsePanel');
+  if (!url) { status.className = 'err'; status.textContent = 'Enter a channel URL, ID, or @handle first'; return; }
   status.className = '';
-  status.textContent = 'Looking up channel playlists…';
+  status.textContent = 'Looking up channel podcasts & playlists…';
   try {
     const res = await fetch('/api/browse-playlists' + tok, {
       method: 'POST',
@@ -443,19 +464,55 @@ async function browsePlaylists(url) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.message || 'Failed to list playlists');
     status.textContent = '';
+    const pods = body.podcasts || [], lists = body.playlists || [];
+    const allIds = [...pods, ...lists].map(p => p.id);
     panel.classList.add('open');
-    panel.innerHTML = `<h3>Playlists found (${body.length}) <button onclick="closeBrowse()">✕ close</button></h3>` +
-      (body.length ? body.map(pl => `
-        <div class="pl-row">
-          <img src="${esc(pl.thumbnail)}" loading="lazy" onerror="this.style.visibility='hidden'">
-          <div class="t">${esc(pl.title)}</div>
-          <div class="c">${pl.count} videos</div>
-          <button onclick="subscribePlaylist('${esc(pl.id)}', this)">Subscribe</button>
-        </div>`).join('') : '<div class="log-empty">No playlists on this channel</div>');
+    panel.innerHTML =
+      (body.channelBanner ? `<img src="${esc(body.channelBanner)}=w1600" style="width:100%;display:block;max-height:110px;object-fit:cover">` : '') +
+      `<div class="pl-row" style="border-top:none;padding:12px 16px">
+        <img src="${esc(body.channelThumb)}" style="border-radius:50%;width:44px;height:44px" onerror="this.style.visibility='hidden'">
+        <div class="t" style="font-weight:700;font-size:15px">${esc(body.channelTitle || 'Channel')}</div>
+        <button onclick="subscribePlaylist('${esc(body.channelId)}', this)" title="One feed with all channel uploads">Whole channel</button>
+        ${pods.length ? `<button onclick='subscribeAll(${JSON.stringify(pods.map(p=>p.id))}, this)'>All podcasts (${pods.length})</button>` : ''}
+        ${lists.length ? `<button onclick='subscribeAll(${JSON.stringify(lists.map(p=>p.id))}, this)'>All playlists (${lists.length})</button>` : ''}
+        ${allIds.length ? `<button onclick='subscribeAll(${JSON.stringify(allIds)}, this)'>Everything (${allIds.length})</button>` : ''}
+        <button style="background:none;border:1px solid var(--border);color:var(--muted)" onclick="closeBrowse()">✕ close</button>
+      </div>` +
+      (pods.length ? `<h3>🎙️ Podcasts (${pods.length})</h3>` + pods.map(plRow).join('') : '') +
+      (lists.length ? `<h3>📃 Playlists (${lists.length})</h3>` + lists.map(plRow).join('') : '') +
+      (!pods.length && !lists.length ? '<div class="log-empty">No podcasts or playlists on this channel</div>' : '');
   } catch (e) {
     status.className = 'err';
     status.textContent = e.message;
   }
+}
+
+async function subscribeAll(ids, btn) {
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  let ok = 0, fail = 0;
+  for (let i = 0; i < ids.length; i++) {
+    status.className = '';
+    status.textContent = `Subscribing ${i + 1} of ${ids.length}… (each feed fetches its full episode list, please wait)`;
+    const rowBtn = document.querySelector(`.pl-row[data-plid="${CSS.escape(ids[i])}"] button`);
+    try {
+      const res = await fetch('/api/podcasts' + tok, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: ids[i] })
+      });
+      if (!res.ok) throw new Error();
+      ok++;
+      if (rowBtn) { rowBtn.textContent = 'Added ✓'; rowBtn.disabled = true; }
+    } catch (e) {
+      fail++;
+      if (rowBtn) rowBtn.textContent = 'Failed ✗';
+    }
+  }
+  status.className = fail ? 'err' : 'ok';
+  status.textContent = `Bulk subscribe done: ${ok} added${fail ? ', ' + fail + ' failed' : ''} ✓`;
+  btn.textContent = 'Done ✓';
+  loadAll();
 }
 function closeBrowse() {
   const p = document.getElementById('browsePanel');

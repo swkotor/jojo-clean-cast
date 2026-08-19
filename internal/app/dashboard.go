@@ -440,10 +440,25 @@ func registerDashboardRoutes(e *echo.Echo) {
 			Count     int64  `json:"count"`
 			Thumbnail string `json:"thumbnail"`
 		}
-		var out []plEntry
+
+		// channel metadata: title, avatar, banner
+		channelTitle, channelThumb, channelBanner := "", "", ""
+		if chResp, err := youtube.YtService.Channels.
+			List([]string{"snippet", "brandingSettings"}).Id(channelId).Do(); err == nil && len(chResp.Items) > 0 {
+			ch := chResp.Items[0]
+			channelTitle = ch.Snippet.Title
+			if ch.Snippet.Thumbnails != nil && ch.Snippet.Thumbnails.Medium != nil {
+				channelThumb = ch.Snippet.Thumbnails.Medium.Url
+			}
+			if ch.BrandingSettings != nil && ch.BrandingSettings.Image != nil {
+				channelBanner = ch.BrandingSettings.Image.BannerExternalUrl
+			}
+		}
+
+		var pods, lists []plEntry
 		pageToken := ""
 		for {
-			call := youtube.YtService.Playlists.List([]string{"snippet", "contentDetails"}).
+			call := youtube.YtService.Playlists.List([]string{"snippet", "contentDetails", "status"}).
 				ChannelId(channelId).MaxResults(50)
 			if pageToken != "" {
 				call = call.PageToken(pageToken)
@@ -454,22 +469,38 @@ func registerDashboardRoutes(e *echo.Echo) {
 			}
 			for _, item := range resp.Items {
 				thumb := ""
-				if item.Snippet.Thumbnails != nil && item.Snippet.Thumbnails.Medium != nil {
-					thumb = item.Snippet.Thumbnails.Medium.Url
+				if item.Snippet.Thumbnails != nil {
+					if item.Snippet.Thumbnails.High != nil {
+						thumb = item.Snippet.Thumbnails.High.Url
+					} else if item.Snippet.Thumbnails.Medium != nil {
+						thumb = item.Snippet.Thumbnails.Medium.Url
+					}
 				}
-				out = append(out, plEntry{
+				entry := plEntry{
 					Id:        item.Id,
 					Title:     item.Snippet.Title,
 					Count:     item.ContentDetails.ItemCount,
 					Thumbnail: thumb,
-				})
+				}
+				if item.Status != nil && item.Status.PodcastStatus == "enabled" {
+					pods = append(pods, entry)
+				} else {
+					lists = append(lists, entry)
+				}
 			}
 			pageToken = resp.NextPageToken
-			if pageToken == "" || len(out) >= 200 {
+			if pageToken == "" || len(pods)+len(lists) >= 300 {
 				break
 			}
 		}
-		return c.JSON(http.StatusOK, out)
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"channelId":     channelId,
+			"channelTitle":  channelTitle,
+			"channelThumb":  channelThumb,
+			"channelBanner": channelBanner,
+			"podcasts":      pods,
+			"playlists":     lists,
+		})
 	})
 
 	// Serve custom cover art
