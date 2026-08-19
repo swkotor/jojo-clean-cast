@@ -42,7 +42,7 @@
   header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
 
   .add-bar {
-    margin: 20px 32px;
+    margin: 20px 32px 8px;
     display: flex;
     gap: 10px;
   }
@@ -71,18 +71,63 @@
   .add-bar button:hover { background: var(--accent-hover); }
   .add-bar button:disabled { opacity: .5; cursor: wait; }
   #status {
-    margin: 0 32px 8px;
+    margin: 0 32px 4px;
     font-size: 13px;
     min-height: 18px;
   }
   #status.ok { color: var(--green); }
   #status.err { color: var(--red); }
 
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 32px;
+    gap: 10px;
+  }
+  .toolbar button, .toolbar .log-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .toolbar button:hover, .toolbar .log-toggle:hover { color: var(--text); }
+  .log-toggle .err-count {
+    color: var(--red);
+    font-weight: 700;
+  }
+
+  #logPanel {
+    margin: 10px 32px 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    max-height: 260px;
+    overflow-y: auto;
+    display: none;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+  }
+  #logPanel.open { display: block; }
+  .log-line {
+    display: flex;
+    gap: 10px;
+    padding: 5px 14px;
+    border-bottom: 1px solid rgba(42,46,59,.5);
+  }
+  .log-line .t { color: var(--muted); flex-shrink: 0; }
+  .log-line.error .m { color: var(--red); }
+  .log-line.info .m { color: var(--text); }
+  .log-empty { padding: 14px; color: var(--muted); }
+
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
     gap: 18px;
-    padding: 12px 32px 48px;
+    padding: 14px 32px 48px;
   }
   .card {
     background: var(--card);
@@ -115,6 +160,16 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
   }
+  .card-head h2 .rename {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
+    margin-left: 6px;
+    border: none;
+    background: none;
+  }
+  .card-head h2 .rename:hover { color: var(--accent); }
+  .orig-name { color: var(--muted); font-size: 11.5px; margin-top: 2px; font-style: italic; }
   .meta {
     display: flex;
     gap: 8px;
@@ -175,7 +230,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 16px;
+    padding: 7px 16px;
     font-size: 13px;
   }
   .ep:last-child { padding-bottom: 14px; }
@@ -186,6 +241,8 @@
   }
   .ep .dot.dl { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,.6); }
   .ep .dot.nd { background: var(--border); }
+  .ep .dot.dling { background: var(--amber); box-shadow: 0 0 6px rgba(251,191,36,.6); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
   .ep .title {
     flex: 1;
     overflow: hidden;
@@ -194,9 +251,23 @@
     color: var(--text);
   }
   .ep .date { color: var(--muted); font-size: 11.5px; flex-shrink: 0; }
-  .ep .state { font-size: 10.5px; font-weight: 600; flex-shrink: 0; width: 82px; text-align: right; }
-  .ep .state.dl { color: var(--green); }
-  .ep .state.nd { color: var(--muted); }
+  .ep-btn {
+    flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    width: 92px;
+    text-align: center;
+  }
+  .ep-btn.download { color: var(--accent); border-color: rgba(139,92,246,.4); }
+  .ep-btn.download:hover { background: rgba(139,92,246,.15); }
+  .ep-btn.delete { color: var(--muted); }
+  .ep-btn.delete:hover { color: var(--red); border-color: var(--red); }
+  .ep-btn.busy { color: var(--amber); border-color: rgba(251,191,36,.4); cursor: default; }
 
   .empty {
     grid-column: 1/-1;
@@ -204,21 +275,6 @@
     color: var(--muted);
     padding: 60px 0;
   }
-  .toolbar {
-    display: flex;
-    justify-content: flex-end;
-    padding: 0 32px;
-  }
-  .toolbar button {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .toolbar button:hover { color: var(--text); }
 </style>
 </head>
 <body>
@@ -235,7 +291,11 @@
   <button id="addBtn" onclick="addPodcast()">Add podcast</button>
 </div>
 <div id="status"></div>
-<div class="toolbar"><button onclick="load()">↻ Refresh</button></div>
+<div class="toolbar">
+  <button class="log-toggle" id="logToggle" onclick="toggleLog()">Activity log <span id="errCount" class="err-count"></span></button>
+  <button onclick="loadAll()">↻ Refresh</button>
+</div>
+<div id="logPanel"></div>
 
 <div class="grid" id="grid"><div class="empty">Loading…</div></div>
 
@@ -246,6 +306,10 @@ const tok = token ? '?token=' + encodeURIComponent(token) : '';
 function fmtDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 function esc(s) {
   return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -264,19 +328,33 @@ async function load() {
     grid.innerHTML = pods.map(p => {
       const feedUrl = location.origin + p.feedPath + tok;
       const appleUrl = 'podcast://' + location.host + p.feedPath + tok;
-      const eps = (p.episodes || []).map(e => `
+      const eps = (p.episodes || []).map(e => {
+        let btn;
+        if (e.downloading) {
+          btn = '<button class="ep-btn busy">Downloading…</button>';
+        } else if (e.downloaded) {
+          btn = `<button class="ep-btn delete" onclick="deleteEpisode('${esc(e.videoId)}')">Delete</button>`;
+        } else {
+          btn = `<button class="ep-btn download" onclick="downloadEpisode('${esc(e.videoId)}', this)">Download</button>`;
+        }
+        const dotCls = e.downloading ? 'dling' : (e.downloaded ? 'dl' : 'nd');
+        return `
         <div class="ep">
-          <div class="dot ${e.downloaded ? 'dl' : 'nd'}"></div>
+          <div class="dot ${dotCls}"></div>
           <div class="title" title="${esc(e.name)}">${esc(e.name)}</div>
           <div class="date">${fmtDate(e.publishedDate)}</div>
-          <div class="state ${e.downloaded ? 'dl' : 'nd'}">${e.downloaded ? 'Downloaded' : 'Not downloaded'}</div>
-        </div>`).join('') || '<div class="ep"><div class="title" style="color:var(--muted)">No episodes tracked yet</div></div>';
+          ${btn}
+        </div>`;
+      }).join('') || '<div class="ep"><div class="title" style="color:var(--muted)">No episodes tracked yet</div></div>';
+      const renameArg = esc(p.id);
+      const origLine = p.customName ? `<div class="orig-name">YouTube: ${esc(p.originalName)}</div>` : '';
       return `
       <div class="card">
         <div class="card-head">
           <img src="${esc(p.imageUrl)}" loading="lazy" onerror="this.style.visibility='hidden'">
           <div class="info">
-            <h2>${esc(p.name)}</h2>
+            <h2>${esc(p.name)}<button class="rename" title="Rename feed" onclick="renamePodcast('${renameArg}')">✎</button></h2>
+            ${origLine}
             <div class="meta">
               <span class="badge ${p.type === 'CHANNEL' ? 'channel' : ''}">${p.type}</span>
               <span class="ep-count">${p.episodeCount} episodes</span>
@@ -294,9 +372,30 @@ async function load() {
         </div>
       </div>`;
     }).join('');
+    window._pods = pods;
   } catch (e) {
     grid.innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + '</div>';
   }
+}
+
+async function loadEvents() {
+  try {
+    const res = await fetch('/api/events' + tok);
+    if (!res.ok) return;
+    const events = await res.json();
+    const errs = events.filter(e => e.level === 'error').length;
+    document.getElementById('errCount').textContent = errs ? `(${errs} errors)` : '';
+    const panel = document.getElementById('logPanel');
+    panel.innerHTML = events.length
+      ? events.map(e => `<div class="log-line ${e.level}"><span class="t">${fmtTime(e.time)}</span><span class="m">${esc(e.message)}</span></div>`).join('')
+      : '<div class="log-empty">No activity yet</div>';
+  } catch (e) { /* panel is best-effort */ }
+}
+
+function loadAll() { load(); loadEvents(); }
+
+function toggleLog() {
+  document.getElementById('logPanel').classList.toggle('open');
 }
 
 async function addPodcast() {
@@ -317,9 +416,9 @@ async function addPodcast() {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.message || 'Failed to add podcast');
     status.className = 'ok';
-    status.textContent = `Added "${body.name}" ✓`;
+    status.textContent = `Added "${body.name}" ✓ — recent episodes will start downloading automatically`;
     input.value = '';
-    load();
+    loadAll();
   } catch (e) {
     status.className = 'err';
     status.textContent = e.message;
@@ -328,10 +427,41 @@ async function addPodcast() {
   }
 }
 
+async function renamePodcast(id) {
+  const p = (window._pods || []).find(x => x.id === id);
+  const current = p ? (p.customName || p.originalName) : '';
+  const name = prompt('New feed name (leave empty to revert to the YouTube name):', current);
+  if (name === null) return;
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name })
+  });
+  if (res.ok) loadAll();
+  else alert('Rename failed');
+}
+
+async function downloadEpisode(videoId, btn) {
+  btn.textContent = 'Starting…';
+  btn.className = 'ep-btn busy';
+  const res = await fetch('/api/episodes/' + encodeURIComponent(videoId) + '/download' + tok, { method: 'POST' });
+  if (!res.ok) {
+    alert('Failed to start download');
+  }
+  setTimeout(loadAll, 2000);
+}
+
+async function deleteEpisode(videoId) {
+  if (!confirm('Delete the downloaded audio file for this episode? It can be re-downloaded any time.')) return;
+  const res = await fetch('/api/episodes/' + encodeURIComponent(videoId) + '/file' + tok, { method: 'DELETE' });
+  if (res.ok) loadAll();
+  else alert('Failed to delete file');
+}
+
 async function removePodcast(id, name) {
   if (!confirm(`Remove "${name}" from jojo-podcasts? Downloaded audio files are kept.`)) return;
   const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, { method: 'DELETE' });
-  if (res.ok) load();
+  if (res.ok) loadAll();
   else alert('Failed to remove podcast');
 }
 
@@ -343,8 +473,8 @@ function copyFeed(url, btn) {
   });
 }
 
-load();
-setInterval(load, 60000);
+loadAll();
+setInterval(loadAll, 20000);
 </script>
 </body>
 </html>

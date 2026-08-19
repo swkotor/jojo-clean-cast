@@ -25,7 +25,7 @@ func GenerateRssFeed(podcast models.Podcast, host string, podcastType enum.Podca
 	}
 
 	now := time.Now()
-	ytPodcast := generator.New(podcast.PodcastName, podcastLink, podcast.Description, &now)
+	ytPodcast := generator.New(podcast.DisplayName(), podcastLink, podcast.Description, &now)
 	ytPodcast.AddImage(transformArtworkURL(podcast.ImageUrl, 1000, 1000))
 	ytPodcast.AddCategory(podcast.Category, []string{""})
 	ytPodcast.Docs = "http://www.rssboard.org/rss-specification"

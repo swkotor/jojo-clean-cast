@@ -5,11 +5,15 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/models"
+	"ikoyhn/podcast-sponsorblock/internal/services/autodl"
 	"ikoyhn/podcast-sponsorblock/internal/services/channel"
+	"ikoyhn/podcast-sponsorblock/internal/services/common"
+	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
 	"ikoyhn/podcast-sponsorblock/internal/services/youtube"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -27,12 +31,15 @@ type dashboardEpisode struct {
 	Name          string `json:"name"`
 	PublishedDate string `json:"publishedDate"`
 	Downloaded    bool   `json:"downloaded"`
+	Downloading   bool   `json:"downloading"`
 	ImageUrl      string `json:"imageUrl"`
 }
 
 type dashboardPodcast struct {
 	Id            string             `json:"id"`
 	Name          string             `json:"name"`
+	OriginalName  string             `json:"originalName"`
+	CustomName    string             `json:"customName"`
 	ArtistName    string             `json:"artistName"`
 	Description   string             `json:"description"`
 	ImageUrl      string             `json:"imageUrl"`
@@ -100,13 +107,16 @@ func registerDashboardRoutes(e *echo.Echo) {
 					Name:          ep.EpisodeName,
 					PublishedDate: ep.PublishedDate.Format(time.RFC3339),
 					Downloaded:    database.FileExistsWithId(audioDirAbs, ep.YoutubeVideoId),
+					Downloading:   autodl.IsDownloading(ep.YoutubeVideoId),
 					ImageUrl:      ep.ImageUrl,
 				})
 			}
 
 			result = append(result, dashboardPodcast{
 				Id:            p.Id,
-				Name:          p.PodcastName,
+				Name:          p.DisplayName(),
+				OriginalName:  p.PodcastName,
+				CustomName:    p.CustomName,
 				ArtistName:    p.ArtistName,
 				Description:   p.Description,
 				ImageUrl:      p.ImageUrl,
@@ -150,12 +160,93 @@ func registerDashboardRoutes(e *echo.Echo) {
 		if podcastType == "CHANNEL" {
 			feedPath = "/channel/" + id
 		}
+		events.Info("Podcast added: %s (%s)", p.PodcastName, id)
+		autodl.CheckPodcast(id)
 		return c.JSON(http.StatusCreated, map[string]string{
 			"id":       id,
 			"name":     p.PodcastName,
 			"type":     podcastType,
 			"feedPath": feedPath,
 		})
+	})
+
+	// Rename the republished feed (empty name reverts to the YouTube name)
+	e.PATCH("/api/podcasts/:id", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		}
+		id := c.Param("id")
+		p := database.GetPodcast(id)
+		if p == nil {
+			return echo.NewHTTPError(http.StatusNotFound, "Podcast not found")
+		}
+		name := strings.TrimSpace(req.Name)
+		if err := database.SetCustomName(id, name); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if name == "" {
+			events.Info("Feed name reverted to YouTube name for %s", p.PodcastName)
+		} else {
+			events.Info("Feed renamed: %s → %s", p.PodcastName, name)
+		}
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	// Trigger a download of one episode
+	e.POST("/api/episodes/:videoId/download", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		videoId := c.Param("videoId")
+		if !common.IsValidParam(videoId) {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid video id")
+		}
+		ep, err := database.GetEpisodeByVideoId(videoId)
+		if err != nil || ep == nil {
+			return echo.NewHTTPError(http.StatusNotFound, "Episode not found")
+		}
+		go autodl.Download(videoId, ep.EpisodeName)
+		return c.JSON(http.StatusAccepted, map[string]string{"status": "downloading"})
+	})
+
+	// Delete a downloaded episode audio file
+	e.DELETE("/api/episodes/:videoId/file", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		videoId := c.Param("videoId")
+		if !common.IsValidParam(videoId) {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid video id")
+		}
+		audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+		filePath := database.FindFileWithId(audioDirAbs, videoId)
+		if filePath == "" {
+			return echo.NewHTTPError(http.StatusNotFound, "No downloaded file for this episode")
+		}
+		if err := os.Remove(filePath); err != nil {
+			events.Error("Failed to delete file for %s: %v", videoId, err)
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		name := videoId
+		if ep, err := database.GetEpisodeByVideoId(videoId); err == nil && ep != nil {
+			name = ep.EpisodeName
+		}
+		events.Info("Deleted audio file: %s", name)
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	// Recent activity / error log for debugging
+	e.GET("/api/events", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, events.List())
 	})
 
 	// Remove a podcast subscription (episode records + podcast row; audio files kept)

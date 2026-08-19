@@ -44,6 +44,12 @@ func GetEpisodeType(podcastId string) string {
 	return episode.Type
 }
 
+// SetCustomName sets (or clears, with "") the user-defined feed name
+func SetCustomName(podcastId, name string) error {
+	return db.Model(&models.Podcast{}).Where("id = ?", podcastId).
+		Update("custom_name", name).Error
+}
+
 // DeletePodcastAndEpisodes removes a podcast and all of its episode records
 func DeletePodcastAndEpisodes(podcastId string) error {
 	if err := db.Where("podcast_id = ?", podcastId).Delete(&models.PodcastEpisode{}).Error; err != nil {

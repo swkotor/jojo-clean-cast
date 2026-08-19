@@ -32,6 +32,15 @@ type Podcast struct {
 	PodcastEpisodes []PodcastEpisode `json:"podcast_episodes"`
 	ArtistName      string           `json:"artist_name"`
 	Explicit        string           `json:"explicit"`
+	CustomName      string           `json:"custom_name"`
+}
+
+// DisplayName returns the user-defined name if set, otherwise the YouTube name
+func (p *Podcast) DisplayName() string {
+	if p.CustomName != "" {
+		return p.CustomName
+	}
+	return p.PodcastName
 }
 
 type EpisodePlaybackHistory struct {

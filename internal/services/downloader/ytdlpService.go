@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
+	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/ntfy"
 	"strings"
 	"sync"
@@ -79,6 +80,9 @@ func GetYoutubeVideo(youtubeVideoId string) <-chan struct{} {
 				if dlErr != nil {
 					ntfy.SendNotification("Download failed!", "Clean Cast - Error")
 					log.Errorf("Error downloading YouTube video: %v", dlErr)
+					events.Error("yt-dlp failed for %s (%s): %v", title, youtubeVideoId, dlErr)
+				} else {
+					events.Error("yt-dlp exited with code %d for %s (%s)", r.ExitCode, title, youtubeVideoId)
 				}
 			}
 		} else {

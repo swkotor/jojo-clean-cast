@@ -40,3 +40,5 @@ tmp/build-errors.log
 
 #VSC
 settings.json
+# local secrets - never commit
+.secrets/
