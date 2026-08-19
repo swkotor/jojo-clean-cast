@@ -35,6 +35,8 @@ type Podcast struct {
 	CustomName      string           `json:"custom_name"`
 	AutoDownloadOff bool             `json:"auto_download_off"`
 	CustomImage     string           `json:"custom_image"`
+	Subscribed      bool             `json:"subscribed"`
+	LastFeedFetch   int64            `json:"last_feed_fetch"`
 }
 
 // DisplayName returns the user-defined name if set, otherwise the YouTube name

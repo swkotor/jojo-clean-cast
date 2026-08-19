@@ -62,6 +62,28 @@ func SetCustomImage(podcastId, filename string) error {
 		Update("custom_image", filename).Error
 }
 
+// SetSubscribed sets the user's manual "subscribed" marker
+func SetSubscribed(podcastId string, subscribed bool) error {
+	return db.Model(&models.Podcast{}).Where("id = ?", podcastId).
+		Update("subscribed", subscribed).Error
+}
+
+// TouchFeedFetch records that a podcast feed was just fetched by a client
+func TouchFeedFetch(podcastId string, ts int64) {
+	db.Model(&models.Podcast{}).Where("id = ?", podcastId).
+		Update("last_feed_fetch", ts)
+}
+
+// GetEpisodesBeyondRecent returns episodes after the N most recent ones
+func GetEpisodesBeyondRecent(podcastId string, keep int) ([]models.PodcastEpisode, error) {
+	var episodes []models.PodcastEpisode
+	err := db.Where("podcast_id = ?", podcastId).
+		Order("published_date DESC").
+		Offset(keep).
+		Find(&episodes).Error
+	return episodes, err
+}
+
 // GetPlaybackHistory returns the playback history row for a video, or nil
 func GetPlaybackHistory(videoId string) *models.EpisodePlaybackHistory {
 	var h models.EpisodePlaybackHistory

@@ -30,6 +30,7 @@ func registerRoutes(e *echo.Echo) {
 			return err
 		}
 		rssRequestParams := validateQueryParams(c)
+		database.TouchFeedFetch(c.Param("channelId"), time.Now().Unix())
 		data := channel.BuildChannelRssFeed(c.Param("channelId"), rssRequestParams, handler(c.Request()))
 		c.Response().Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
 		c.Response().Header().Set("Content-Length", strconv.Itoa(len(data)))
@@ -43,6 +44,7 @@ func registerRoutes(e *echo.Echo) {
 		}
 		validateQueryParams(c)
 		playlistId := strings.Split(c.Param("youtubePlaylistId"), "&")[0]
+		database.TouchFeedFetch(playlistId, time.Now().Unix())
 		data := playlist.BuildPlaylistRssFeed(playlistId, handler(c.Request()))
 		c.Response().Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
 		c.Response().Header().Set("Content-Length", strconv.Itoa(len(data)))

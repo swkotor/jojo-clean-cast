@@ -48,6 +48,8 @@ type dashboardPodcast struct {
 	FeedPath      string             `json:"feedPath"`
 	EpisodeCount  int64              `json:"episodeCount"`
 	AutoDownload  bool               `json:"autoDownload"`
+	Subscribed    bool               `json:"subscribed"`
+	LastFeedFetch int64              `json:"lastFeedFetch"`
 	LastBuildDate string             `json:"lastBuildDate"`
 	Episodes      []dashboardEpisode `json:"episodes"`
 }
@@ -131,6 +133,8 @@ func registerDashboardRoutes(e *echo.Echo) {
 				FeedPath:      feedPath,
 				EpisodeCount:  database.CountEpisodes(p.Id),
 				AutoDownload:  !p.AutoDownloadOff,
+				Subscribed:    p.Subscribed,
+				LastFeedFetch: p.LastFeedFetch,
 				LastBuildDate: p.LastBuildDate,
 				Episodes:      dashEpisodes,
 			})
@@ -186,6 +190,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 		var req struct {
 			Name         *string `json:"name"`
 			AutoDownload *bool   `json:"autoDownload"`
+			Subscribed   *bool   `json:"subscribed"`
 		}
 		if err := c.Bind(&req); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
@@ -215,6 +220,11 @@ func registerDashboardRoutes(e *echo.Echo) {
 				state = "disabled"
 			}
 			events.Info("Auto-download %s for %s", state, p.DisplayName())
+		}
+		if req.Subscribed != nil {
+			if err := database.SetSubscribed(id, *req.Subscribed); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			}
 		}
 		return c.NoContent(http.StatusNoContent)
 	})

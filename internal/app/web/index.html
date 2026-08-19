@@ -208,6 +208,21 @@
   }
   .badge.channel { background: rgba(236, 72, 153, .15); color: #ec4899; }
   .ep-count { color: var(--muted); font-size: 12px; }
+  .sub-tick {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 20px;
+    cursor: pointer;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .sub-tick.on {
+    color: var(--green);
+    border-color: rgba(52,211,153,.4);
+    background: rgba(52,211,153,.08);
+  }
+  .sub-tick:hover { border-color: var(--green); }
 
   .actions {
     display: flex;
@@ -397,7 +412,9 @@ async function load() {
             ${p.imageUrl.startsWith('/covers/') ? `<div class="orig-name"><a href="#" style="color:var(--muted)" onclick="resetCover('${esc(p.id)}');return false">↺ reset cover art</a></div>` : ''}
             <div class="meta">
               <span class="badge ${p.type === 'CHANNEL' ? 'channel' : ''}">${p.type}</span>
+              <span class="sub-tick ${p.subscribed ? 'on' : ''}" title="Mark as subscribed on your devices" onclick="toggleSubscribed('${esc(p.id)}', ${p.subscribed})">${p.subscribed ? '✓ Subscribed' : '○ Not subscribed'}</span>
               <span class="ep-count">${p.episodeCount} episodes</span>
+              ${p.lastFeedFetch ? `<span class="ep-count" title="Last time a podcast app fetched this feed">· polled ${ago(p.lastFeedFetch)}</span>` : ''}
             </div>
           </div>
         </div>
@@ -512,6 +529,23 @@ async function resetCover(id) {
   const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + '/cover' + tok, { method: 'DELETE' });
   if (res.ok) { coverVersion = Date.now(); loadAll(); }
   else alert('Failed to reset cover art');
+}
+
+function ago(unixSec) {
+  const s = Math.floor(Date.now() / 1000) - unixSec;
+  if (s < 90) return 'just now';
+  if (s < 5400) return Math.round(s / 60) + 'm ago';
+  if (s < 129600) return Math.round(s / 3600) + 'h ago';
+  return Math.round(s / 86400) + 'd ago';
+}
+
+async function toggleSubscribed(id, current) {
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subscribed: !current })
+  });
+  if (res.ok) loadAll();
 }
 
 async function toggleAutoDl(id, current) {

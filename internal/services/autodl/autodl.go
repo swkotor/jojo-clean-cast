@@ -146,12 +146,40 @@ func runOnce() {
 		return
 	}
 	for _, p := range podcasts {
-		if p.AutoDownloadOff {
+		if !p.AutoDownloadOff {
+			refreshPodcast(p.Id)
+			downloadRecent(p.Id)
+		}
+		cleanupServed(p.Id)
+		pruneOldEpisodes(p.Id)
+	}
+}
+
+// pruneOldEpisodes deletes downloaded audio files for episodes older than the
+// N most recent per podcast. Files modified in the last 24h are spared so a
+// manual download of an old episode isn't removed immediately. Episodes are
+// still re-downloadable on demand when a podcast app requests them.
+func pruneOldEpisodes(podcastId string) {
+	keep := recentCount
+	older, err := database.GetEpisodesBeyondRecent(podcastId, keep)
+	if err != nil {
+		return
+	}
+	audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+	for _, ep := range older {
+		if IsDownloading(ep.YoutubeVideoId) {
 			continue
 		}
-		refreshPodcast(p.Id)
-		downloadRecent(p.Id)
-		cleanupServed(p.Id)
+		filePath := database.FindFileWithId(audioDirAbs, ep.YoutubeVideoId)
+		if filePath == "" {
+			continue
+		}
+		if info, err := os.Stat(filePath); err == nil && time.Since(info.ModTime()) < 24*time.Hour {
+			continue // recently downloaded on purpose — keep for now
+		}
+		if err := os.Remove(filePath); err == nil {
+			events.Info("Pruned old episode (outside latest %d): %s", keep, ep.EpisodeName)
+		}
 	}
 }
 
@@ -160,7 +188,7 @@ func runOnce() {
 // accessed more than the cleanup window ago. The playback-history row is
 // kept so the episode is not re-downloaded automatically.
 func cleanupServed(podcastId string) {
-	window := 72 * time.Hour
+	window := 6 * time.Hour
 	if v := os.Getenv("AUTO_CLEANUP_AFTER"); v != "" {
 		if strings.EqualFold(v, "off") {
 			return
