@@ -56,6 +56,12 @@ func SetAutoDownload(podcastId string, enabled bool) error {
 		Update("auto_download_off", !enabled).Error
 }
 
+// SetCustomImage sets (or clears, with "") the custom cover art filename
+func SetCustomImage(podcastId, filename string) error {
+	return db.Model(&models.Podcast{}).Where("id = ?", podcastId).
+		Update("custom_image", filename).Error
+}
+
 // GetPlaybackHistory returns the playback history row for a video, or nil
 func GetPlaybackHistory(videoId string) *models.EpisodePlaybackHistory {
 	var h models.EpisodePlaybackHistory

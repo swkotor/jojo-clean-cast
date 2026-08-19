@@ -11,6 +11,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
 	"ikoyhn/podcast-sponsorblock/internal/services/youtube"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -113,6 +114,11 @@ func registerDashboardRoutes(e *echo.Echo) {
 				})
 			}
 
+			imageUrl := p.ImageUrl
+			if p.CustomImage != "" {
+				imageUrl = "/covers/" + p.Id
+			}
+
 			result = append(result, dashboardPodcast{
 				Id:            p.Id,
 				Name:          p.DisplayName(),
@@ -120,7 +126,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 				CustomName:    p.CustomName,
 				ArtistName:    p.ArtistName,
 				Description:   p.Description,
-				ImageUrl:      p.ImageUrl,
+				ImageUrl:      imageUrl,
 				Type:          podcastType,
 				FeedPath:      feedPath,
 				EpisodeCount:  database.CountEpisodes(p.Id),
@@ -210,6 +216,89 @@ func registerDashboardRoutes(e *echo.Echo) {
 			}
 			events.Info("Auto-download %s for %s", state, p.DisplayName())
 		}
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	// Serve custom cover art
+	e.GET("/covers/:id", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		id := c.Param("id")
+		if strings.ContainsAny(id, "/\\.") {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id")
+		}
+		coversDir := filepath.Join(config.AppConfig.Setup.ConfigDir, "covers")
+		file := database.FindFileWithId(coversDir, id)
+		if file == "" {
+			return echo.NewHTTPError(http.StatusNotFound, "No custom cover")
+		}
+		return c.File(file)
+	})
+
+	// Upload custom cover art for a podcast
+	e.POST("/api/podcasts/:id/cover", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		id := c.Param("id")
+		if database.GetPodcast(id) == nil {
+			return echo.NewHTTPError(http.StatusNotFound, "Podcast not found")
+		}
+		fh, err := c.FormFile("image")
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "No image file in request")
+		}
+		if fh.Size > 10*1024*1024 {
+			return echo.NewHTTPError(http.StatusBadRequest, "Image too large (max 10 MB)")
+		}
+		ext := strings.ToLower(filepath.Ext(fh.Filename))
+		if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
+			return echo.NewHTTPError(http.StatusBadRequest, "Use a .jpg, .png, or .webp image")
+		}
+		coversDir := filepath.Join(config.AppConfig.Setup.ConfigDir, "covers")
+		if err := os.MkdirAll(coversDir, 0o755); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		// remove any previous cover for this podcast
+		if old := database.FindFileWithId(coversDir, id); old != "" {
+			os.Remove(old)
+		}
+		src, err := fh.Open()
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		defer src.Close()
+		destPath := filepath.Join(coversDir, id+ext)
+		dest, err := os.Create(destPath)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		defer dest.Close()
+		if _, err := io.Copy(dest, src); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if err := database.SetCustomImage(id, id+ext); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		events.Info("Custom cover art uploaded for %s", id)
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	// Remove custom cover art (revert to YouTube artwork)
+	e.DELETE("/api/podcasts/:id/cover", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		id := c.Param("id")
+		coversDir := filepath.Join(config.AppConfig.Setup.ConfigDir, "covers")
+		if old := database.FindFileWithId(coversDir, id); old != "" {
+			os.Remove(old)
+		}
+		if err := database.SetCustomImage(id, ""); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		events.Info("Custom cover art removed for %s", id)
 		return c.NoContent(http.StatusNoContent)
 	})
 

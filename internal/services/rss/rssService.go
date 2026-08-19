@@ -26,7 +26,14 @@ func GenerateRssFeed(podcast models.Podcast, host string, podcastType enum.Podca
 
 	now := time.Now()
 	ytPodcast := generator.New(podcast.DisplayName(), podcastLink, podcast.Description, &now)
-	ytPodcast.AddImage(transformArtworkURL(podcast.ImageUrl, 1000, 1000))
+	coverUrl := transformArtworkURL(podcast.ImageUrl, 1000, 1000)
+	if podcast.CustomImage != "" {
+		coverUrl = host + "/covers/" + podcast.Id
+		if config.AppConfig.Authentication.Token != "" {
+			coverUrl += "?token=" + config.AppConfig.Authentication.Token
+		}
+	}
+	ytPodcast.AddImage(coverUrl)
 	ytPodcast.AddCategory(podcast.Category, []string{""})
 	ytPodcast.Docs = "http://www.rssboard.org/rss-specification"
 	ytPodcast.IAuthor = podcast.ArtistName

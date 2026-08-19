@@ -143,13 +143,33 @@
     padding: 16px;
     align-items: flex-start;
   }
-  .card-head img {
+  .cover {
+    position: relative;
+    width: 72px; height: 72px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .cover img {
     width: 72px; height: 72px;
     border-radius: 12px;
     object-fit: cover;
     background: var(--border);
-    flex-shrink: 0;
+    display: block;
   }
+  .cover .cover-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.55);
+    border-radius: 12px;
+    color: white;
+    font-size: 18px;
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  .cover:hover .cover-hint { opacity: 1; }
   .card-head .info { flex: 1; min-width: 0; }
   .card-head h2 {
     font-size: 16px;
@@ -301,6 +321,7 @@
 <div id="logPanel"></div>
 
 <div class="grid" id="grid"><div class="empty">Loading…</div></div>
+<input type="file" id="coverFile" accept=".jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadCover(this)">
 
 <script>
 const token = new URLSearchParams(location.search).get('token');
@@ -366,10 +387,14 @@ async function load() {
       return `
       <div class="card">
         <div class="card-head">
-          <img src="${esc(p.imageUrl)}" loading="lazy" onerror="this.style.visibility='hidden'">
+          <div class="cover" title="Click to upload custom cover art" onclick="pickCover('${esc(p.id)}')">
+            <img src="${esc(p.imageUrl.startsWith('/covers/') ? p.imageUrl + '?v=' + coverVersion : p.imageUrl)}" loading="lazy" onerror="this.style.visibility='hidden'">
+            <div class="cover-hint">✎</div>
+          </div>
           <div class="info">
             <h2>${esc(p.name)}<button class="rename" title="Rename feed" onclick="renamePodcast('${renameArg}')">✎</button></h2>
             ${origLine}
+            ${p.imageUrl.startsWith('/covers/') ? `<div class="orig-name"><a href="#" style="color:var(--muted)" onclick="resetCover('${esc(p.id)}');return false">↺ reset cover art</a></div>` : ''}
             <div class="meta">
               <span class="badge ${p.type === 'CHANNEL' ? 'channel' : ''}">${p.type}</span>
               <span class="ep-count">${p.episodeCount} episodes</span>
@@ -456,6 +481,37 @@ async function renamePodcast(id) {
   });
   if (res.ok) loadAll();
   else alert('Rename failed');
+}
+
+let coverVersion = Date.now();
+let coverPodcastId = null;
+
+function pickCover(id) {
+  coverPodcastId = id;
+  document.getElementById('coverFile').click();
+}
+
+async function uploadCover(input) {
+  if (!input.files.length || !coverPodcastId) return;
+  const fd = new FormData();
+  fd.append('image', input.files[0]);
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(coverPodcastId) + '/cover' + tok, {
+    method: 'POST',
+    body: fd
+  });
+  input.value = '';
+  if (res.ok) { coverVersion = Date.now(); loadAll(); }
+  else {
+    const body = await res.json().catch(() => ({}));
+    alert(body.message || 'Failed to upload cover art');
+  }
+}
+
+async function resetCover(id) {
+  if (!confirm('Revert to the original YouTube cover art?')) return;
+  const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + '/cover' + tok, { method: 'DELETE' });
+  if (res.ok) { coverVersion = Date.now(); loadAll(); }
+  else alert('Failed to reset cover art');
 }
 
 async function toggleAutoDl(id, current) {
