@@ -51,6 +51,7 @@ func GetYoutubeVideo(youtubeVideoId string) <-chan struct{} {
 		NoProgress().
 		Format("bestaudio[ext=m4a]/bestaudio[ext=aac]/bestaudio[ext=opus]/bestaudio[ext=vorbis]/bestaudio/best").
 		SponsorblockRemove(categories).
+		RemoteComponents("ejs:github").
 		ExtractAudio().
 		NoPlaylist().
 		FFmpegLocation("/usr/bin/ffmpeg").
