@@ -659,6 +659,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 		}
 		resp := map[string]string{
 			"publicUrl": strings.TrimRight(os.Getenv("PUBLIC_URL"), "/"),
+			"sbDefault": config.AppConfig.Ytdlp.SponsorBlockCategories,
 		}
 		// Only reveal the token to local-network clients, so the local
 		// dashboard can build remote (tunnel) links that include it

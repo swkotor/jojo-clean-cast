@@ -284,6 +284,7 @@
 const token = new URLSearchParams(location.search).get('token');
 const tok = token ? '?token=' + encodeURIComponent(token) : '';
 let publicUrl = '';
+let sbDefault = '';
 let remoteTok = tok;
 let coverVersion = Date.now();
 let coverPodcastId = null;
@@ -293,6 +294,7 @@ try { collapsed = new Set(JSON.parse(localStorage.getItem('jojoCollapsed') || '[
 
 fetch('/api/config' + tok).then(r => r.json()).then(c => {
   publicUrl = c.publicUrl || '';
+  sbDefault = c.sbDefault || '';
   if (c.token) remoteTok = '?token=' + encodeURIComponent(c.token);
   const link = document.getElementById('remoteLink');
   if (publicUrl && remoteTok) {
@@ -398,7 +400,7 @@ async function load() {
               <span class="chip ${p.subscribed ? 'on' : ''}" title="Mark as subscribed on your devices" onclick="toggleSubscribed('${esc(p.id)}', ${p.subscribed})">${p.subscribed ? '✓ Subscribed' : '○ Not subscribed'}</span>
               <span class="ep-count">${p.episodeCount} episodes</span>
               <a class="yt-link" target="_blank" rel="noopener" href="${ytUrl}">▶ YouTube</a>
-              <button class="chip ${p.sbCategories ? 'on' : ''}" title="SponsorBlock categories for this feed" onclick="editSbCategories('${esc(p.id)}', '${esc(p.sbCategories)}')">SB${p.sbCategories ? ': ' + esc(p.sbCategories) : ''}</button>
+              <button class="chip ${p.sbCategories ? 'on' : ''}" title="SponsorBlock categories for this feed" onclick="openSbEditor('${esc(p.id)}')">SB: ${esc(p.sbCategories || sbDefault || 'sponsor')}</button>
               ${!isVirtual ? `<button class="chip" title="Create a filtered sub-feed from a recurring series in this feed" onclick="openSplit('${esc(p.id)}')">⑂ Split</button>` : ''}
               ${p.lastFeedFetch ? `<span class="ep-count" title="Last time a podcast app fetched this feed">· polled ${ago(p.lastFeedFetch)}</span>` : ''}
             </div>
@@ -774,12 +776,98 @@ async function renamePodcast(id) {
   if (name === null) return;
   patchPodcast(id, { name });
 }
-function editSbCategories(id, current) {
-  const cats = prompt(
-    'SponsorBlock categories for this feed (comma-separated).\nOptions: sponsor, selfpromo, interaction, intro, outro, preview, music_offtopic, filler\nLeave empty to use the global default.',
-    current || '');
-  if (cats === null) return;
-  patchPodcast(id, { sbCategories: cats });
+// The official SponsorBlock categories yt-dlp understands. These can be
+// toggled but never removed from the list.
+const SB_STANDARD = [
+  ['sponsor', 'Paid promotion / sponsor read'],
+  ['selfpromo', 'Unpaid self-promotion'],
+  ['interaction', 'Like & subscribe reminders'],
+  ['intro', 'Intro / intermission animation'],
+  ['outro', 'Outro / end cards'],
+  ['preview', 'Recap or preview of the episode'],
+  ['music_offtopic', 'Non-music section in a music video'],
+  ['filler', 'Tangential filler / jokes'],
+];
+let sbState = { id: null, selected: new Set(), custom: [] };
+
+function openSbEditor(id) {
+  const p = (window._pods || []).find(x => x.id === id);
+  const effective = (p && p.sbCategories) ? p.sbCategories : (sbDefault || '');
+  const list = effective.split(',').map(s => s.trim()).filter(Boolean);
+  const std = SB_STANDARD.map(c => c[0]);
+  sbState = {
+    id,
+    selected: new Set(list),
+    custom: list.filter(c => !std.includes(c)),
+    usingDefault: !(p && p.sbCategories)
+  };
+  document.getElementById('modalTitle').textContent = 'SponsorBlock — ' + (p ? p.name : '');
+  document.getElementById('modalSearch').style.display = 'none';
+  document.getElementById('modalWrap').classList.add('open');
+  renderSbEditor();
+}
+
+function renderSbEditor() {
+  const rows = SB_STANDARD.map(([key, desc]) => sbRow(key, desc, false)).join('') +
+    sbState.custom.map(key => sbRow(key, 'Custom category', true)).join('');
+  document.getElementById('modalBody').innerHTML = `
+    <div style="padding:10px 18px;font-size:12.5px;color:var(--muted)">
+      Toggle which segments yt-dlp removes for this feed.
+      ${sbState.usingDefault ? `Currently inheriting the global default (<b style="color:var(--text)">${esc(sbDefault || 'sponsor')}</b>).` : ''}
+    </div>
+    ${rows}
+    <div class="m-custom" style="border-top:1px solid var(--border)">
+      <input id="sbNew" placeholder="Add a custom category (e.g. poi_highlight)" onkeydown="if(event.key==='Enter')addSbCustom()">
+      <button onclick="addSbCustom()">Add</button>
+    </div>
+    <div class="m-custom" style="border-top:1px solid var(--border)">
+      <div style="flex:1;font-size:12px;color:var(--muted)">Selected: ${[...sbState.selected].join(', ') || 'none (nothing will be cut)'}</div>
+      <button style="background:none;border:1px solid var(--border);color:var(--muted)" onclick="saveSb(true)">Use global default</button>
+      <button onclick="saveSb(false)">Save</button>
+    </div>`;
+}
+
+function sbRow(key, desc, isCustom) {
+  const on = sbState.selected.has(key);
+  return `
+    <div class="series-row">
+      <input type="checkbox" class="ex-box" ${on ? 'checked' : ''} onchange="toggleSb('${esc(key)}')">
+      <div class="t">
+        <span style="font-weight:600;color:${isCustom ? 'var(--amber)' : 'var(--text)'}">${esc(key)}</span>
+        ${isCustom ? '<span class="badge" style="margin-left:6px;background:rgba(251,191,36,.15);color:var(--amber)">CUSTOM</span>' : ''}
+        <div style="font-size:11.5px;color:var(--muted)">${esc(desc)}</div>
+      </div>
+      ${isCustom
+        ? `<button style="background:none;border:1px solid var(--border);color:var(--muted)" title="Remove this custom category" onclick="removeSbCustom('${esc(key)}')">✕</button>`
+        : `<span class="c" title="Standard category — can be toggled but not removed">standard</span>`}
+    </div>`;
+}
+
+function toggleSb(key) {
+  if (sbState.selected.has(key)) sbState.selected.delete(key); else sbState.selected.add(key);
+  sbState.usingDefault = false;
+  renderSbEditor();
+}
+function addSbCustom() {
+  const input = document.getElementById('sbNew');
+  const val = (input.value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!val) return;
+  const std = SB_STANDARD.map(c => c[0]);
+  if (!std.includes(val) && !sbState.custom.includes(val)) sbState.custom.push(val);
+  sbState.selected.add(val);
+  sbState.usingDefault = false;
+  renderSbEditor();
+}
+function removeSbCustom(key) {
+  sbState.custom = sbState.custom.filter(c => c !== key);
+  sbState.selected.delete(key);
+  sbState.usingDefault = false;
+  renderSbEditor();
+}
+async function saveSb(useDefault) {
+  const cats = useDefault ? '' : [...sbState.selected].join(',');
+  await patchPodcast(sbState.id, { sbCategories: cats });
+  closeModal();
 }
 function toggleSubscribed(id, current) { patchPodcast(id, { subscribed: !current }); }
 function toggleAutoDl(id, current) { patchPodcast(id, { autoDownload: !current }); }
