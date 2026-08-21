@@ -96,7 +96,21 @@
   }
   .pl-row button:disabled { opacity: .5; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 18px; padding: 14px 32px 48px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 18px; padding: 0 32px 20px; }
+  .chan-head {
+    margin: 22px 32px 0; border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; background: var(--card);
+  }
+  .chan-head .banner { width: 100%; height: 84px; object-fit: cover; display: block; }
+  .chan-head .row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
+  .chan-head img.avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--border); }
+  .chan-head .name { font-weight: 700; font-size: 15px; flex: 1; }
+  .chan-head .cnt { color: var(--muted); font-size: 12px; }
+  .chan-head button {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+  }
+  .chan-head button.danger:hover { color: var(--red); border-color: var(--red); }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
   .card-head { display: flex; gap: 14px; padding: 16px; align-items: flex-start; }
   .cover { position: relative; width: 72px; height: 72px; flex-shrink: 0; cursor: pointer; }
@@ -328,7 +342,23 @@ async function load() {
       grid.innerHTML = '<div class="empty">No podcasts yet — add one above 👆</div>';
       return;
     }
-    grid.innerHTML = pods.map(p => {
+
+    // group by owning channel (children inherit their parent's channel)
+    const chanOf = p => {
+      if (p.parentId) {
+        const par = pods.find(x => x.id === p.parentId);
+        if (par) return par.channelId || '';
+      }
+      return p.channelId || '';
+    };
+    const groups = new Map();
+    for (const p of pods) {
+      const cid = chanOf(p) || '__ungrouped__';
+      if (!groups.has(cid)) groups.set(cid, []);
+      groups.get(cid).push(p);
+    }
+
+    const renderCard = p => {
       const feedUrl = location.origin + p.feedPath + tok;
       const isVirtual = p.type === 'FILTER';
       const ytId = isVirtual ? p.parentId : p.id;
@@ -371,10 +401,45 @@ async function load() {
           ${eps}
         </div>
       </div>`;
+    };
+
+    // render: channel header + its grid, ungrouped last
+    const entries = [...groups.entries()].sort((a, b) => {
+      if (a[0] === '__ungrouped__') return 1;
+      if (b[0] === '__ungrouped__') return -1;
+      const an = (a[1][0].channelTitle || ''), bn = (b[1][0].channelTitle || '');
+      return an.localeCompare(bn);
+    });
+    grid.outerHTML = '<div id="grid"></div>';
+    const root = document.getElementById('grid');
+    root.style.padding = '0';
+    root.innerHTML = entries.map(([cid, list]) => {
+      const first = list.find(p => p.channelTitle) || list[0];
+      const head = cid === '__ungrouped__'
+        ? `<div class="chan-head"><div class="row"><div class="name">Other feeds</div><div class="cnt">${list.length} feed(s)</div></div></div>`
+        : `<div class="chan-head">
+             ${first.channelBanner ? `<img class="banner" src="${esc(first.channelBanner)}=w1600" onerror="this.style.display='none'">` : ''}
+             <div class="row">
+               <img class="avatar" src="${esc(first.channelThumb)}" onerror="this.style.visibility='hidden'">
+               <div class="name">${esc(first.channelTitle || 'Channel')}</div>
+               <div class="cnt">${list.length} feed(s)</div>
+               <a class="yt-link" target="_blank" rel="noopener" href="https://www.youtube.com/channel/${esc(cid)}">▶ Channel</a>
+               <button onclick="browsePlaylists('${esc(cid)}')">＋ Browse channel</button>
+               <button class="danger" onclick="removeChannel('${esc(cid)}', '${esc(first.channelTitle || 'this channel').replace(/'/g, "\\'")}', ${list.length})">🗑 Remove all</button>
+             </div>
+           </div>`;
+      return head + `<div class="grid">` + list.map(renderCard).join('') + `</div>`;
     }).join('');
   } catch (e) {
-    grid.innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + '</div>';
+    document.getElementById('grid').innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + '</div>';
   }
+}
+
+async function removeChannel(channelId, name, count) {
+  if (!confirm(`Remove all ${count} feed(s) from "${name}"? Downloaded audio files are kept.`)) return;
+  const res = await fetch('/api/channels/' + encodeURIComponent(channelId) + tok, { method: 'DELETE' });
+  if (res.ok) loadAll();
+  else alert('Failed to remove channel feeds');
 }
 
 async function loadEvents() {
@@ -440,12 +505,15 @@ async function addPodcast() {
 }
 
 function plRow(pl) {
+  const have = (window._pods || []).some(p => p.id === pl.id);
   return `
     <div class="pl-row" data-plid="${esc(pl.id)}">
       <img src="${esc(pl.thumbnail)}" loading="lazy" onerror="this.style.visibility='hidden'">
       <div class="t">${esc(pl.title)}</div>
       <div class="c">${pl.count} videos</div>
-      <button onclick="subscribePlaylist('${esc(pl.id)}', this)">Subscribe</button>
+      ${have
+        ? `<button style="background:none;border:1px solid rgba(52,211,153,.4);color:var(--green)" onclick="removePodcast('${esc(pl.id)}','${esc(pl.title).replace(/'/g, "\\'")}')">✓ Subscribed — remove</button>`
+        : `<button onclick="subscribePlaylist('${esc(pl.id)}', this)">Subscribe</button>`}
     </div>`;
 }
 
@@ -465,7 +533,8 @@ async function browsePlaylists(url) {
     if (!res.ok) throw new Error(body.message || 'Failed to list playlists');
     status.textContent = '';
     const pods = body.podcasts || [], lists = body.playlists || [];
-    const allIds = [...pods, ...lists].map(p => p.id);
+      const have = new Set((window._pods || []).map(p => p.id));
+    const allIds = [...pods, ...lists].map(p => p.id).filter(id => !have.has(id));
     panel.classList.add('open');
     panel.innerHTML =
       (body.channelBanner ? `<img src="${esc(body.channelBanner)}=w1600" style="width:100%;display:block;max-height:110px;object-fit:cover">` : '') +
@@ -473,8 +542,8 @@ async function browsePlaylists(url) {
         <img src="${esc(body.channelThumb)}" style="border-radius:50%;width:44px;height:44px" onerror="this.style.visibility='hidden'">
         <div class="t" style="font-weight:700;font-size:15px">${esc(body.channelTitle || 'Channel')}</div>
         <button onclick="subscribePlaylist('${esc(body.channelId)}', this)" title="One feed with all channel uploads">Whole channel</button>
-        ${pods.length ? `<button onclick='subscribeAll(${JSON.stringify(pods.map(p=>p.id))}, this)'>All podcasts (${pods.length})</button>` : ''}
-        ${lists.length ? `<button onclick='subscribeAll(${JSON.stringify(lists.map(p=>p.id))}, this)'>All playlists (${lists.length})</button>` : ''}
+        ${pods.filter(p=>!have.has(p.id)).length ? `<button onclick='subscribeAll(${JSON.stringify(pods.map(p=>p.id).filter(id=>!have.has(id)))}, this)'>All podcasts (${pods.filter(p=>!have.has(p.id)).length})</button>` : ''}
+        ${lists.filter(p=>!have.has(p.id)).length ? `<button onclick='subscribeAll(${JSON.stringify(lists.map(p=>p.id).filter(id=>!have.has(id)))}, this)'>All playlists (${lists.filter(p=>!have.has(p.id)).length})</button>` : ''}
         ${allIds.length ? `<button onclick='subscribeAll(${JSON.stringify(allIds)}, this)'>Everything (${allIds.length})</button>` : ''}
         <button style="background:none;border:1px solid var(--border);color:var(--muted)" onclick="closeBrowse()">✕ close</button>
       </div>` +

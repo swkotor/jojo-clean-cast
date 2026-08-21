@@ -43,6 +43,11 @@ type Podcast struct {
 	TitleFilter string `json:"title_filter"`
 	// Per-podcast SponsorBlock category override (comma-separated)
 	SponsorblockCategories string `json:"sponsorblock_categories"`
+	// Owning YouTube channel (for grouping podcasts/playlists in the UI)
+	ChannelId     string `json:"channel_id"`
+	ChannelTitle  string `json:"channel_title"`
+	ChannelThumb  string `json:"channel_thumb"`
+	ChannelBanner string `json:"channel_banner"`
 }
 
 // IsVirtual reports whether this podcast is a filtered sub-feed

@@ -5,6 +5,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/services/autodl"
+	"ikoyhn/podcast-sponsorblock/internal/services/channelinfo"
 	"ikoyhn/podcast-sponsorblock/internal/services/youtube"
 
 	"github.com/labstack/echo/v4"
@@ -35,6 +36,7 @@ func Start() {
 	database.TrackEpisodeFiles()
 
 	setupCron()
+	channelinfo.BackfillAll()
 	autodl.Start()
 
 	setupHandlers(e)

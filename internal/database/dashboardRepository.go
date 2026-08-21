@@ -80,6 +80,24 @@ func CountEpisodesFiltered(podcastId, filter string) int64 {
 	return count
 }
 
+// SetChannelInfo records the owning channel of a podcast for UI grouping
+func SetChannelInfo(podcastId, channelId, title, thumb, banner string) error {
+	return db.Model(&models.Podcast{}).Where("id = ?", podcastId).
+		Updates(map[string]interface{}{
+			"channel_id":     channelId,
+			"channel_title":  title,
+			"channel_thumb":  thumb,
+			"channel_banner": banner,
+		}).Error
+}
+
+// GetPodcastsByChannel returns all podcasts belonging to a channel
+func GetPodcastsByChannel(channelId string) []models.Podcast {
+	var podcasts []models.Podcast
+	db.Where("channel_id = ?", channelId).Find(&podcasts)
+	return podcasts
+}
+
 // SetSponsorblockCategories sets the per-podcast SponsorBlock override
 func SetSponsorblockCategories(podcastId, categories string) error {
 	return db.Model(&models.Podcast{}).Where("id = ?", podcastId).

@@ -7,6 +7,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/models"
 	"ikoyhn/podcast-sponsorblock/internal/services/autodl"
 	"ikoyhn/podcast-sponsorblock/internal/services/channel"
+	"ikoyhn/podcast-sponsorblock/internal/services/channelinfo"
 	"ikoyhn/podcast-sponsorblock/internal/services/common"
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
@@ -56,6 +57,10 @@ type dashboardPodcast struct {
 	ParentId      string             `json:"parentId"`
 	TitleFilter   string             `json:"titleFilter"`
 	SbCategories  string             `json:"sbCategories"`
+	ChannelId     string             `json:"channelId"`
+	ChannelTitle  string             `json:"channelTitle"`
+	ChannelThumb  string             `json:"channelThumb"`
+	ChannelBanner string             `json:"channelBanner"`
 	LastBuildDate string             `json:"lastBuildDate"`
 	Episodes      []dashboardEpisode `json:"episodes"`
 }
@@ -162,6 +167,10 @@ func registerDashboardRoutes(e *echo.Echo) {
 				ParentId:      p.ParentId,
 				TitleFilter:   p.TitleFilter,
 				SbCategories:  p.SponsorblockCategories,
+				ChannelId:     p.ChannelId,
+				ChannelTitle:  p.ChannelTitle,
+				ChannelThumb:  p.ChannelThumb,
+				ChannelBanner: p.ChannelBanner,
 				LastBuildDate: p.LastBuildDate,
 				Episodes:      dashEpisodes,
 			})
@@ -200,6 +209,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 			feedPath = "/channel/" + id
 		}
 		events.Info("Podcast added: %s (%s)", p.PodcastName, id)
+		channelinfo.ResolveForPodcast(id)
 		autodl.CheckPodcast(id)
 		return c.JSON(http.StatusCreated, map[string]string{
 			"id":       id,
@@ -266,6 +276,30 @@ func registerDashboardRoutes(e *echo.Echo) {
 			}
 		}
 		return c.NoContent(http.StatusNoContent)
+	})
+
+	// Remove every feed belonging to a channel
+	e.DELETE("/api/channels/:channelId", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		channelId := c.Param("channelId")
+		podcasts := database.GetPodcastsByChannel(channelId)
+		if len(podcasts) == 0 {
+			return echo.NewHTTPError(http.StatusNotFound, "No podcasts for that channel")
+		}
+		removed := 0
+		for _, p := range podcasts {
+			for _, child := range database.GetChildFeeds(p.Id) {
+				database.DeletePodcastAndEpisodes(child.Id)
+				removed++
+			}
+			if err := database.DeletePodcastAndEpisodes(p.Id); err == nil {
+				removed++
+			}
+		}
+		events.Info("Removed %d feed(s) from channel %s", removed, channelId)
+		return c.JSON(http.StatusOK, map[string]int{"removed": removed})
 	})
 
 	// Liveness probe (no auth — used by Docker HEALTHCHECK)
