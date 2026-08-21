@@ -581,9 +581,9 @@ async function browsePlaylists(url) {
         <img src="${esc(data.channelThumb)}" style="border-radius:50%;width:44px;height:44px" onerror="this.style.visibility='hidden'">
         <div class="t" style="font-weight:700;font-size:15px">${esc(data.channelTitle || 'Channel')}</div>
         <button onclick="subscribePlaylist('${esc(data.channelId)}', this)" title="One feed with all channel uploads">Whole channel</button>
-        ${newPods.length ? `<button onclick='subscribeAll(${JSON.stringify(newPods)}, this)'>All podcasts (${newPods.length})</button>` : ''}
-        ${newLists.length ? `<button onclick='subscribeAll(${JSON.stringify(newLists)}, this)'>All playlists (${newLists.length})</button>` : ''}
-        ${allIds.length ? `<button onclick='subscribeAll(${JSON.stringify(allIds)}, this)'>Everything (${allIds.length})</button>` : ''}
+        ${newPods.length ? `<button onclick='subscribeAll(${JSON.stringify(newPods)}, this, "podcasts")'>All podcasts (${newPods.length})</button>` : ''}
+        ${newLists.length ? `<button onclick='subscribeAll(${JSON.stringify(newLists)}, this, "playlists")'>All playlists (${newLists.length})</button>` : ''}
+        ${allIds.length ? `<button onclick='subscribeAll(${JSON.stringify(allIds)}, this, "feeds")'>Everything (${allIds.length})</button>` : ''}
       </div>` +
       (pods.length ? `<h3 style="font-size:12px;padding:12px 18px 4px;color:var(--muted)">🎙️ Podcasts (${pods.length})</h3>` + pods.map(plRow).join('') : '') +
       (lists.length ? `<h3 style="font-size:12px;padding:12px 18px 4px;color:var(--muted)">📃 Playlists (${lists.length})</h3>` + lists.map(plRow).join('') : '') +
@@ -593,8 +593,10 @@ async function browsePlaylists(url) {
   }
 }
 
-async function subscribeAll(ids, btn) {
+async function subscribeAll(ids, btn, label) {
   const status = document.getElementById('status');
+  const what = label || 'items';
+  if (!confirm(`Subscribe to all ${ids.length} new ${what}? Each one fetches its full episode list, so this can take a while.`)) return;
   btn.disabled = true;
   let ok = 0, fail = 0;
   for (let i = 0; i < ids.length; i++) {
