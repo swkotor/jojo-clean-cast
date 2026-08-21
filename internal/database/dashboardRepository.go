@@ -193,6 +193,12 @@ func GetEpisodesBeyondRecent(podcastId string, keep int) ([]models.PodcastEpisod
 	return episodes, err
 }
 
+// SetAutoImage records the locally cached artwork filename for a feed
+func SetAutoImage(podcastId, filename string) error {
+	return db.Model(&models.Podcast{}).Where("id = ?", podcastId).
+		Update("auto_image", filename).Error
+}
+
 // GetPlaybackHistory returns the playback history row for a video, or nil
 func GetPlaybackHistory(videoId string) *models.EpisodePlaybackHistory {
 	var h models.EpisodePlaybackHistory

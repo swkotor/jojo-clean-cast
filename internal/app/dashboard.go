@@ -5,6 +5,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/models"
+	"ikoyhn/podcast-sponsorblock/internal/services/artwork"
 	"ikoyhn/podcast-sponsorblock/internal/services/autodl"
 	"ikoyhn/podcast-sponsorblock/internal/services/channel"
 	"ikoyhn/podcast-sponsorblock/internal/services/channelinfo"
@@ -109,9 +110,13 @@ func registerDashboardRoutes(e *echo.Echo) {
 				feedPath = "/rss/" + p.Id
 				episodes, err = database.GetRecentEpisodesFiltered(p.ParentId, p.TitleFilter, p.ExcludeTerms(), 5)
 				episodeCount = database.CountEpisodesFiltered(p.ParentId, p.TitleFilter, p.ExcludeTerms())
-				if p.CustomImage == "" && p.ImageUrl == "" {
+				if p.CustomImage == "" && p.AutoImage == "" {
 					if parent := database.GetPodcast(p.ParentId); parent != nil {
-						p.ImageUrl = parent.ImageUrl
+						if parent.CustomImage != "" || parent.AutoImage != "" {
+							p.ImageUrl = "/covers/" + parent.Id
+						} else {
+							p.ImageUrl = parent.ImageUrl
+						}
 					}
 				}
 			} else {
@@ -147,7 +152,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 			}
 
 			imageUrl := p.ImageUrl
-			if p.CustomImage != "" {
+			if p.CustomImage != "" || p.AutoImage != "" {
 				imageUrl = "/covers/" + p.Id
 			}
 
@@ -212,6 +217,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 		}
 		events.Info("Podcast added: %s (%s)", p.PodcastName, id)
 		channelinfo.ResolveForPodcast(id)
+		go artwork.Resolve(id)
 		autodl.CheckPodcast(id)
 		return c.JSON(http.StatusCreated, map[string]string{
 			"id":       id,
@@ -581,7 +587,20 @@ func registerDashboardRoutes(e *echo.Echo) {
 		coversDir := filepath.Join(config.AppConfig.Setup.ConfigDir, "covers")
 		file := database.FindFileWithId(coversDir, id)
 		if file == "" {
-			return echo.NewHTTPError(http.StatusNotFound, "No custom cover")
+			file = database.FindFileWithId(artwork.Dir(), id)
+		}
+		if file == "" {
+			// filtered sub-feeds inherit their parent's artwork
+			if i := strings.Index(id, "~"); i > 0 {
+				parentId := id[:i]
+				file = database.FindFileWithId(coversDir, parentId)
+				if file == "" {
+					file = database.FindFileWithId(artwork.Dir(), parentId)
+				}
+			}
+		}
+		if file == "" {
+			return echo.NewHTTPError(http.StatusNotFound, "No cover art")
 		}
 		return c.File(file)
 	})
@@ -648,6 +667,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 		if err := database.SetCustomImage(id, ""); err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
+		go artwork.Resolve(id)
 		events.Info("Custom cover art removed for %s", id)
 		return c.NoContent(http.StatusNoContent)
 	})

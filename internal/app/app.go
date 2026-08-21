@@ -4,6 +4,7 @@ import (
 	"context"
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
+	"ikoyhn/podcast-sponsorblock/internal/services/artwork"
 	"ikoyhn/podcast-sponsorblock/internal/services/autodl"
 	"ikoyhn/podcast-sponsorblock/internal/services/channelinfo"
 	"ikoyhn/podcast-sponsorblock/internal/services/youtube"
@@ -37,6 +38,7 @@ func Start() {
 
 	setupCron()
 	channelinfo.BackfillAll()
+	artwork.BackfillAll()
 	autodl.Start()
 
 	setupHandlers(e)

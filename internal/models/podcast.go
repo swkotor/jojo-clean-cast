@@ -36,6 +36,8 @@ type Podcast struct {
 	CustomName      string           `json:"custom_name"`
 	AutoDownloadOff bool             `json:"auto_download_off"`
 	CustomImage     string           `json:"custom_image"`
+	// Locally cached YouTube artwork (filename in <config>/art)
+	AutoImage string `json:"auto_image"`
 	Subscribed      bool             `json:"subscribed"`
 	LastFeedFetch   int64            `json:"last_feed_fetch"`
 	// Filtered sub-feed support: a "virtual" podcast that republishes a

@@ -35,9 +35,13 @@ func BuildFilteredRssFeed(virtualId string, host string) []byte {
 	}
 
 	// fall back to parent artwork if the virtual feed has none of its own
-	if v.CustomImage == "" && v.ImageUrl == "" {
+	if v.CustomImage == "" && v.AutoImage == "" {
 		if parent := database.GetPodcast(v.ParentId); parent != nil {
 			v.ImageUrl = parent.ImageUrl
+			// art is served at /covers/<virtualId>, which falls back to the parent
+			if parent.CustomImage != "" || parent.AutoImage != "" {
+				v.AutoImage = parent.AutoImage
+			}
 			if v.ArtistName == "" {
 				v.ArtistName = parent.ArtistName
 			}

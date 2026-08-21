@@ -26,8 +26,10 @@ func GenerateRssFeed(podcast models.Podcast, host string, podcastType enum.Podca
 
 	now := time.Now()
 	ytPodcast := generator.New(podcast.DisplayName(), podcastLink, podcast.Description, &now)
-	coverUrl := transformArtworkURL(podcast.ImageUrl, 1000, 1000)
-	if podcast.CustomImage != "" {
+	// Prefer artwork we serve ourselves: square, clean URL, always reachable
+	// (YouTube's signed CDN URLs are not, and the old filename rewrite 404s).
+	coverUrl := podcast.ImageUrl
+	if podcast.CustomImage != "" || podcast.AutoImage != "" {
 		coverUrl = host + "/covers/" + podcast.Id
 		if config.AppConfig.Authentication.Token != "" {
 			coverUrl += "?token=" + config.AppConfig.Authentication.Token
