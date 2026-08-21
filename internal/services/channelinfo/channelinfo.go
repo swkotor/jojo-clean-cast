@@ -57,17 +57,41 @@ func ResolveForPodcast(podcastId string) {
 		return
 	}
 	channelId := podcastId
+	playlistTitle, playlistThumb := "", ""
 	if !channelIdRegex.MatchString(podcastId) {
 		// playlist → look up the owning channel
 		resp, err := youtube.YtService.Playlists.List([]string{"snippet"}).Id(podcastId).Do()
 		if err != nil || len(resp.Items) == 0 {
 			return
 		}
-		channelId = resp.Items[0].Snippet.ChannelId
+		sn := resp.Items[0].Snippet
+		channelId = sn.ChannelId
+		playlistTitle = sn.Title
+		if sn.Thumbnails != nil {
+			if sn.Thumbnails.Maxres != nil {
+				playlistThumb = sn.Thumbnails.Maxres.Url
+			} else if sn.Thumbnails.Standard != nil {
+				playlistThumb = sn.Thumbnails.Standard.Url
+			} else if sn.Thumbnails.High != nil {
+				playlistThumb = sn.Thumbnails.High.Url
+			}
+		}
 	}
 	title, thumb, banner := Lookup(channelId)
 	if title == "" {
 		return
+	}
+
+	// Older versions named playlist feeds after the owning channel — if the
+	// stored name is just the channel name, correct it to the playlist title
+	if playlistTitle != "" && playlistTitle != title {
+		if p := database.GetPodcast(podcastId); p != nil && p.PodcastName == title {
+			if err := database.UpdatePodcastNameAndImage(podcastId, playlistTitle, playlistThumb); err != nil {
+				log.Errorf("[CHANNELINFO] %v", err)
+			} else {
+				events.Info("Renamed feed to its playlist title: %s → %s", title, playlistTitle)
+			}
+		}
 	}
 	if err := database.SetChannelInfo(podcastId, channelId, title, thumb, banner); err != nil {
 		log.Errorf("[CHANNELINFO] %v", err)
@@ -90,7 +114,14 @@ func BackfillAll() {
 		}
 		done := 0
 		for _, p := range podcasts {
-			if p.ChannelId != "" || p.IsVirtual() {
+			if p.IsVirtual() {
+				continue
+			}
+			// resolve if we have no channel info yet, or if the feed is still
+			// named after its channel (older naming bug for playlist feeds)
+			needsName := p.ChannelTitle != "" && p.PodcastName == p.ChannelTitle &&
+				!channelIdRegex.MatchString(p.Id)
+			if p.ChannelId != "" && !needsName {
 				continue
 			}
 			ResolveForPodcast(p.Id)

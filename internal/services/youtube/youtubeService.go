@@ -29,6 +29,7 @@ func SetupYoutubeService() {
 func GetChannelData(dbPodcast *models.Podcast, channelIdentifier string, isPlaylist bool) (*models.Podcast, error) {
 	var channelCall *ytApi.ChannelsListCall
 	var channelId string
+	var playlistSnippet *ytApi.PlaylistSnippet
 
 	if dbPodcast == nil {
 		if isPlaylist {
@@ -43,6 +44,7 @@ func GetChannelData(dbPodcast *models.Podcast, channelIdentifier string, isPlayl
 			}
 			playlist := playlistResponse.Items[0]
 			channelId = playlist.Snippet.ChannelId
+			playlistSnippet = playlist.Snippet
 		} else {
 			channelId = channelIdentifier
 		}
@@ -69,12 +71,39 @@ func GetChannelData(dbPodcast *models.Podcast, channelIdentifier string, isPlayl
 			imageUrl = channel.Snippet.Thumbnails.Default.Url
 		}
 
+		// For a playlist feed, prefer the playlist's own title, description
+		// and artwork — the channel name alone is ambiguous when a channel
+		// publishes several shows.
+		podcastName := channel.Snippet.Title
+		description := channel.Snippet.Description
+		postedDate := channel.Snippet.PublishedAt
+		if playlistSnippet != nil {
+			if playlistSnippet.Title != "" {
+				podcastName = playlistSnippet.Title
+			}
+			if playlistSnippet.Description != "" {
+				description = playlistSnippet.Description
+			}
+			if playlistSnippet.PublishedAt != "" {
+				postedDate = playlistSnippet.PublishedAt
+			}
+			if playlistSnippet.Thumbnails != nil {
+				if playlistSnippet.Thumbnails.Maxres != nil {
+					imageUrl = playlistSnippet.Thumbnails.Maxres.Url
+				} else if playlistSnippet.Thumbnails.Standard != nil {
+					imageUrl = playlistSnippet.Thumbnails.Standard.Url
+				} else if playlistSnippet.Thumbnails.High != nil {
+					imageUrl = playlistSnippet.Thumbnails.High.Url
+				}
+			}
+		}
+
 		dbPodcast = &models.Podcast{
 			Id:              channelIdentifier,
-			PodcastName:     channel.Snippet.Title,
-			Description:     channel.Snippet.Description,
+			PodcastName:     podcastName,
+			Description:     description,
 			ImageUrl:        imageUrl,
-			PostedDate:      channel.Snippet.PublishedAt,
+			PostedDate:      postedDate,
 			PodcastEpisodes: []models.PodcastEpisode{},
 			ArtistName:      channel.Snippet.Title,
 			Explicit:        "false",

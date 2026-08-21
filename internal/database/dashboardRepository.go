@@ -102,6 +102,19 @@ func SetChannelInfo(podcastId, channelId, title, thumb, banner string) error {
 		}).Error
 }
 
+// UpdatePodcastNameAndImage corrects a feed's YouTube-derived name (and
+// artwork, if the feed has no custom cover)
+func UpdatePodcastNameAndImage(podcastId, name, imageUrl string) error {
+	updates := map[string]interface{}{"podcast_name": name}
+	if imageUrl != "" {
+		var p models.Podcast
+		if err := db.Where("id = ?", podcastId).First(&p).Error; err == nil && p.CustomImage == "" {
+			updates["image_url"] = imageUrl
+		}
+	}
+	return db.Model(&models.Podcast{}).Where("id = ?", podcastId).Updates(updates).Error
+}
+
 // GetPodcastsByChannel returns all podcasts belonging to a channel
 func GetPodcastsByChannel(channelId string) []models.Podcast {
 	var podcasts []models.Podcast
