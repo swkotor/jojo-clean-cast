@@ -92,7 +92,7 @@ func Download(videoId, episodeName string) {
 	defer inProgress.Delete(videoId)
 
 	events.Info("Download started: %s", name)
-	done := downloader.GetYoutubeVideo(videoId)
+	done := downloader.GetYoutubeVideo(videoId, false)
 	select {
 	case <-done:
 	case <-time.After(2 * time.Hour):

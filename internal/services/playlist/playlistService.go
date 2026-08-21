@@ -21,21 +21,36 @@ func BuildPlaylistRssFeed(youtubePlaylistId string, host string) []byte {
 
 	shouldUpdate := true
 	if dbPodcast != nil && dbPodcast.LastBuildDate != "" {
-		dur, err := time.ParseDuration(config.AppConfig.Setup.PodcastRefreshInterval)
+		dur := config.AppConfig.Setup.PodcastRefreshInterval
+		lastBuild, err := common.ParseLastBuildDate(dbPodcast.LastBuildDate)
 		if err != nil {
-			panic("Invalid [podcast-refresh-interval] format. Use formats like '5m', '1h', '400s'.")
-		}
-		lastBuild, err := time.Parse(time.RFC1123, dbPodcast.LastBuildDate)
-		if err == nil && time.Since(lastBuild) < dur {
+			log.Warnf("[YOUTUBE API] Unreadable last build date %q for playlist %s, refreshing: %v",
+				dbPodcast.LastBuildDate, youtubePlaylistId, err)
+		} else if time.Since(lastBuild) < dur {
 			shouldUpdate = false
-			log.Infof("[YOUTUBE API] Skipping channel update, last build date within %v", dur)
+			log.Infof("[YOUTUBE API] Skipping playlist update, last build date within %v", dur)
 		}
 	}
 
 	if shouldUpdate {
-		dbPodcast = youtube.GetChannelData(dbPodcast, youtubePlaylistId, true)
-		getYoutubePlaylistData(youtubePlaylistId)
-		dbPodcast = database.GetPodcast(youtubePlaylistId)
+		updated, err := youtube.GetChannelData(dbPodcast, youtubePlaylistId, true)
+		if err != nil {
+			log.Errorf("[RSS FEED] Could not load playlist %s: %v", youtubePlaylistId, err)
+			if dbPodcast == nil {
+				return nil
+			}
+		} else {
+			dbPodcast = updated
+			getYoutubePlaylistData(youtubePlaylistId)
+			if refreshed := database.GetPodcast(youtubePlaylistId); refreshed != nil {
+				dbPodcast = refreshed
+			}
+		}
+	}
+
+	if dbPodcast == nil {
+		log.Errorf("[RSS FEED] No podcast data available for playlist %s", youtubePlaylistId)
+		return nil
 	}
 
 	episodes, err := database.GetPodcastEpisodesByPodcastId(youtubePlaylistId, enum.PLAYLIST)
@@ -65,8 +80,9 @@ func getYoutubePlaylistData(youtubePlaylistId string) {
 		}
 
 		response, ytAgainErr := call.Do()
-		if ytAgainErr != nil {
-			log.Errorf("Error calling YouTube API for Playlist: %s. Ensure your API key is valid, if your API key is valid you have have reached your API quota.", youtubePlaylistId)
+		if ytAgainErr != nil || response == nil {
+			log.Errorf("Error calling YouTube API for Playlist: %s (%v). Ensure your API key is valid, if your API key is valid you have have reached your API quota.", youtubePlaylistId, ytAgainErr)
+			return
 		}
 		if response.HTTPStatusCode != http.StatusOK {
 			log.Errorf("YouTube API returned status code %s for Playlist: %s", strconv.Itoa(response.HTTPStatusCode), youtubePlaylistId)

@@ -24,21 +24,36 @@ func BuildChannelRssFeed(channelId string, params *models.RssRequestParams, host
 
 	shouldUpdate := true
 	if dbPodcast != nil && dbPodcast.LastBuildDate != "" {
-		dur, err := time.ParseDuration(config.AppConfig.Setup.PodcastRefreshInterval)
+		dur := config.AppConfig.Setup.PodcastRefreshInterval
+		lastBuild, err := common.ParseLastBuildDate(dbPodcast.LastBuildDate)
 		if err != nil {
-			panic("Invalid [podcast-refresh-interval] format. Use formats like '5m', '1h', '400s'.")
-		}
-		lastBuild, err := time.Parse(time.RFC1123, dbPodcast.LastBuildDate)
-		if err == nil && time.Since(lastBuild) < dur {
+			log.Warnf("[YOUTUBE API] Unreadable last build date %q for channel %s, refreshing: %v",
+				dbPodcast.LastBuildDate, channelId, err)
+		} else if time.Since(lastBuild) < dur {
 			shouldUpdate = false
 			log.Infof("[YOUTUBE API] Skipping channel update, last build date within %v", dur)
 		}
 	}
 
 	if shouldUpdate {
-		dbPodcast = youtube.GetChannelData(dbPodcast, channelId, false)
-		getChannelMetadataAndVideos(channelId, params)
-		dbPodcast = database.GetPodcast(channelId)
+		updated, err := youtube.GetChannelData(dbPodcast, channelId, false)
+		if err != nil {
+			log.Errorf("[RSS FEED] Could not load channel %s: %v", channelId, err)
+			if dbPodcast == nil {
+				return nil
+			}
+		} else {
+			dbPodcast = updated
+			getChannelMetadataAndVideos(channelId, params)
+			if refreshed := database.GetPodcast(channelId); refreshed != nil {
+				dbPodcast = refreshed
+			}
+		}
+	}
+
+	if dbPodcast == nil {
+		log.Errorf("[RSS FEED] No podcast data available for channel %s", channelId)
+		return nil
 	}
 
 	episodes, err := database.GetPodcastEpisodesByPodcastId(channelId, enum.CHANNEL)
@@ -57,15 +72,20 @@ func getChannelMetadataAndVideos(channelId string, params *models.RssRequestPara
 	if !youtube.FindChannel(channelId) {
 		return
 	}
-	oldestSavedEpisode, err := database.GetOldestEpisode(channelId)
-	latestSavedEpisode, err := database.GetLatestEpisode(channelId)
+	oldestSavedEpisode, oldestErr := database.GetOldestEpisode(channelId)
+	if oldestErr != nil && !errors.Is(oldestErr, gorm.ErrRecordNotFound) {
+		log.Error(oldestErr)
+		return
+	}
+	latestSavedEpisode, latestErr := database.GetLatestEpisode(channelId)
+	if latestErr != nil && !errors.Is(latestErr, gorm.ErrRecordNotFound) {
+		log.Error(latestErr)
+		return
+	}
 
 	switch determineRequestType(params) {
 	case enum.DATE:
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return
-		}
-		if oldestSavedEpisode != nil {
+		if oldestSavedEpisode != nil && latestSavedEpisode != nil {
 			if latestSavedEpisode.PublishedDate.After(*params.Date) {
 				getChannelVideosByDateRange(channelId, time.Now(), *params.Date)
 			} else if oldestSavedEpisode.PublishedDate.After(*params.Date) {
