@@ -265,7 +265,6 @@
   </div>
 </div>
 <div id="logPanel"></div>
-<div id="browsePanel"></div>
 
 <div class="grid" id="grid"><div class="empty">Loading…</div></div>
 <input type="file" id="coverFile" accept=".jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadCover(this)">
@@ -550,40 +549,47 @@ function plRow(pl) {
 
 async function browsePlaylists(url) {
   const status = document.getElementById('status');
-  const panel = document.getElementById('browsePanel');
   if (!url) { status.className = 'err'; status.textContent = 'Enter a channel URL, ID, or @handle first'; return; }
+
+  // open the overlay immediately, in view wherever the page is scrolled to
+  document.getElementById('modalTitle').textContent = 'Browsing channel…';
+  document.getElementById('modalSearch').style.display = 'none';
+  const body = document.getElementById('modalBody');
+  body.innerHTML = '<div class="log-empty">Looking up channel podcasts &amp; playlists…</div>';
+  document.getElementById('modalWrap').classList.add('open');
   status.className = '';
-  status.textContent = 'Looking up channel podcasts & playlists…';
+  status.textContent = '';
+
   try {
     const res = await fetch('/api/browse-playlists' + tok, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: url })
     });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || 'Failed to list playlists');
-    status.textContent = '';
-    const pods = body.podcasts || [], lists = body.playlists || [];
-      const have = new Set((window._pods || []).map(p => p.id));
-    const allIds = [...pods, ...lists].map(p => p.id).filter(id => !have.has(id));
-    panel.classList.add('open');
-    panel.innerHTML =
-      (body.channelBanner ? `<img src="${esc(body.channelBanner)}=w1600" style="width:100%;display:block;max-height:110px;object-fit:cover">` : '') +
-      `<div class="pl-row" style="border-top:none;padding:12px 16px">
-        <img src="${esc(body.channelThumb)}" style="border-radius:50%;width:44px;height:44px" onerror="this.style.visibility='hidden'">
-        <div class="t" style="font-weight:700;font-size:15px">${esc(body.channelTitle || 'Channel')}</div>
-        <button onclick="subscribePlaylist('${esc(body.channelId)}', this)" title="One feed with all channel uploads">Whole channel</button>
-        ${pods.filter(p=>!have.has(p.id)).length ? `<button onclick='subscribeAll(${JSON.stringify(pods.map(p=>p.id).filter(id=>!have.has(id)))}, this)'>All podcasts (${pods.filter(p=>!have.has(p.id)).length})</button>` : ''}
-        ${lists.filter(p=>!have.has(p.id)).length ? `<button onclick='subscribeAll(${JSON.stringify(lists.map(p=>p.id).filter(id=>!have.has(id)))}, this)'>All playlists (${lists.filter(p=>!have.has(p.id)).length})</button>` : ''}
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'Failed to list playlists');
+    const pods = data.podcasts || [], lists = data.playlists || [];
+    const have = new Set((window._pods || []).map(p => p.id));
+    const newPods = pods.map(p => p.id).filter(id => !have.has(id));
+    const newLists = lists.map(p => p.id).filter(id => !have.has(id));
+    const allIds = [...newPods, ...newLists];
+
+    document.getElementById('modalTitle').textContent = data.channelTitle || 'Channel';
+    body.innerHTML =
+      (data.channelBanner ? `<img src="${esc(data.channelBanner)}=w1600" style="width:100%;display:block;max-height:110px;object-fit:cover">` : '') +
+      `<div class="pl-row" style="border-top:none;padding:12px 18px;flex-wrap:wrap">
+        <img src="${esc(data.channelThumb)}" style="border-radius:50%;width:44px;height:44px" onerror="this.style.visibility='hidden'">
+        <div class="t" style="font-weight:700;font-size:15px">${esc(data.channelTitle || 'Channel')}</div>
+        <button onclick="subscribePlaylist('${esc(data.channelId)}', this)" title="One feed with all channel uploads">Whole channel</button>
+        ${newPods.length ? `<button onclick='subscribeAll(${JSON.stringify(newPods)}, this)'>All podcasts (${newPods.length})</button>` : ''}
+        ${newLists.length ? `<button onclick='subscribeAll(${JSON.stringify(newLists)}, this)'>All playlists (${newLists.length})</button>` : ''}
         ${allIds.length ? `<button onclick='subscribeAll(${JSON.stringify(allIds)}, this)'>Everything (${allIds.length})</button>` : ''}
-        <button style="background:none;border:1px solid var(--border);color:var(--muted)" onclick="closeBrowse()">✕ close</button>
       </div>` +
-      (pods.length ? `<h3>🎙️ Podcasts (${pods.length})</h3>` + pods.map(plRow).join('') : '') +
-      (lists.length ? `<h3>📃 Playlists (${lists.length})</h3>` + lists.map(plRow).join('') : '') +
+      (pods.length ? `<h3 style="font-size:12px;padding:12px 18px 4px;color:var(--muted)">🎙️ Podcasts (${pods.length})</h3>` + pods.map(plRow).join('') : '') +
+      (lists.length ? `<h3 style="font-size:12px;padding:12px 18px 4px;color:var(--muted)">📃 Playlists (${lists.length})</h3>` + lists.map(plRow).join('') : '') +
       (!pods.length && !lists.length ? '<div class="log-empty">No podcasts or playlists on this channel</div>' : '');
   } catch (e) {
-    status.className = 'err';
-    status.textContent = e.message;
+    body.innerHTML = '<div class="log-empty" style="color:var(--red)">' + esc(e.message) + '</div>';
   }
 }
 
@@ -614,11 +620,9 @@ async function subscribeAll(ids, btn) {
   btn.textContent = 'Done ✓';
   loadAll();
 }
-function closeBrowse() {
-  const p = document.getElementById('browsePanel');
-  p.classList.remove('open');
-  p.innerHTML = '';
-}
+
+// keep the older inline panel helper harmless if anything still calls it
+function closeBrowse() { closeModal(); }
 async function subscribePlaylist(id, btn) {
   btn.disabled = true;
   btn.textContent = 'Adding…';
