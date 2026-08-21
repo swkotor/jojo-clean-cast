@@ -106,6 +106,14 @@
   .chan-head img.avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--border); }
   .chan-head .name { font-weight: 700; font-size: 15px; flex: 1; }
   .chan-head .cnt { color: var(--muted); font-size: 12px; }
+  .chan-head .row { cursor: pointer; }
+  .chan-head.collapsed { opacity: .85; }
+  .chan-head.collapsed:hover { opacity: 1; }
+  .chan-head .caret {
+    border: none; background: none; color: var(--muted);
+    font-size: 14px; padding: 2px 4px; cursor: pointer; flex-shrink: 0;
+  }
+  .chan-head .caret:hover { color: var(--text); }
   .chan-head button {
     background: none; border: 1px solid var(--border); color: var(--muted);
     border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer;
@@ -249,6 +257,8 @@
 <div class="toolbar">
   <button id="logToggle" onclick="toggleLog()">Activity log <span id="errCount" class="err-count"></span></button>
   <div class="right">
+    <button onclick="setAllChannels(true)">⊟ Collapse all</button>
+    <button onclick="setAllChannels(false)">⊞ Expand all</button>
     <a id="opmlLink" href="/opml" download>Export OPML</a>
     <button onclick="loadAll()">↻ Refresh</button>
   </div>
@@ -277,6 +287,9 @@ let publicUrl = '';
 let remoteTok = tok;
 let coverVersion = Date.now();
 let coverPodcastId = null;
+let collapsed = new Set();
+let groupIds = [];
+try { collapsed = new Set(JSON.parse(localStorage.getItem('jojoCollapsed') || '[]')); } catch (e) {}
 
 fetch('/api/config' + tok).then(r => r.json()).then(c => {
   publicUrl = c.publicUrl || '';
@@ -410,16 +423,20 @@ async function load() {
       const an = (a[1][0].channelTitle || ''), bn = (b[1][0].channelTitle || '');
       return an.localeCompare(bn);
     });
+    groupIds = entries.map(([cid]) => cid);
     grid.outerHTML = '<div id="grid"></div>';
     const root = document.getElementById('grid');
     root.style.padding = '0';
     root.innerHTML = entries.map(([cid, list]) => {
       const first = list.find(p => p.channelTitle) || list[0];
+      const open = !collapsed.has(cid);
+      const caret = `<button class="caret" title="${open ? 'Collapse' : 'Expand'}" onclick="toggleChannel('${esc(cid)}')">${open ? '▾' : '▸'}</button>`;
       const head = cid === '__ungrouped__'
-        ? `<div class="chan-head"><div class="row"><div class="name">Other feeds</div><div class="cnt">${list.length} feed(s)</div></div></div>`
-        : `<div class="chan-head">
-             ${first.channelBanner ? `<img class="banner" src="${esc(first.channelBanner)}=w1600" onerror="this.style.display='none'">` : ''}
-             <div class="row">
+        ? `<div class="chan-head${open ? '' : ' collapsed'}"><div class="row" onclick="toggleChannel('${esc(cid)}')">${caret}<div class="name">Other feeds</div><div class="cnt">${list.length} feed(s)</div></div></div>`
+        : `<div class="chan-head${open ? '' : ' collapsed'}">
+             ${open && first.channelBanner ? `<img class="banner" src="${esc(first.channelBanner)}=w1600" onerror="this.style.display='none'">` : ''}
+             <div class="row" onclick="if(!event.target.closest('button,a'))toggleChannel('${esc(cid)}')">
+               ${caret}
                <img class="avatar" src="${esc(first.channelThumb)}" onerror="this.style.visibility='hidden'">
                <div class="name">${esc(first.channelTitle || 'Channel')}</div>
                <div class="cnt">${list.length} feed(s)</div>
@@ -428,11 +445,22 @@ async function load() {
                <button class="danger" onclick="removeChannel('${esc(cid)}', '${esc(first.channelTitle || 'this channel').replace(/'/g, "\\'")}', ${list.length})">🗑 Remove all</button>
              </div>
            </div>`;
-      return head + `<div class="grid">` + list.map(renderCard).join('') + `</div>`;
+      return head + (open ? `<div class="grid">` + list.map(renderCard).join('') + `</div>` : '');
     }).join('');
   } catch (e) {
     document.getElementById('grid').innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + '</div>';
   }
+}
+
+function toggleChannel(cid) {
+  if (collapsed.has(cid)) collapsed.delete(cid); else collapsed.add(cid);
+  try { localStorage.setItem('jojoCollapsed', JSON.stringify([...collapsed])); } catch (e) {}
+  load();
+}
+function setAllChannels(collapse) {
+  collapsed = new Set(collapse ? [...groupIds] : []);
+  try { localStorage.setItem('jojoCollapsed', JSON.stringify([...collapsed])); } catch (e) {}
+  load();
 }
 
 async function removeChannel(channelId, name, count) {
