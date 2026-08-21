@@ -2,6 +2,7 @@ package models
 
 import (
 	"ikoyhn/podcast-sponsorblock/internal/enum"
+	"strings"
 	"time"
 
 	log "github.com/labstack/gommon/log"
@@ -41,6 +42,9 @@ type Podcast struct {
 	// title-filtered subset of its parent's episodes
 	ParentId    string `json:"parent_id"`
 	TitleFilter string `json:"title_filter"`
+	// Comma-separated terms; episodes whose titles contain any of them are
+	// excluded from this feed (used for "everything else" feeds)
+	ExcludeFilter string `json:"exclude_filter"`
 	// Per-podcast SponsorBlock category override (comma-separated)
 	SponsorblockCategories string `json:"sponsorblock_categories"`
 	// Owning YouTube channel (for grouping podcasts/playlists in the UI)
@@ -53,6 +57,20 @@ type Podcast struct {
 // IsVirtual reports whether this podcast is a filtered sub-feed
 func (p *Podcast) IsVirtual() bool {
 	return p.ParentId != ""
+}
+
+// ExcludeTerms returns the exclusion terms as a slice
+func (p *Podcast) ExcludeTerms() []string {
+	if strings.TrimSpace(p.ExcludeFilter) == "" {
+		return nil
+	}
+	var out []string
+	for _, t := range strings.Split(p.ExcludeFilter, "|") {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // DisplayName returns the user-defined name if set, otherwise the YouTube name

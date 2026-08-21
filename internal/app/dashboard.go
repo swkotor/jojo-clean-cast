@@ -56,6 +56,7 @@ type dashboardPodcast struct {
 	LastFeedFetch int64              `json:"lastFeedFetch"`
 	ParentId      string             `json:"parentId"`
 	TitleFilter   string             `json:"titleFilter"`
+	ExcludeFilter string             `json:"excludeFilter"`
 	SbCategories  string             `json:"sbCategories"`
 	ChannelId     string             `json:"channelId"`
 	ChannelTitle  string             `json:"channelTitle"`
@@ -106,8 +107,8 @@ func registerDashboardRoutes(e *echo.Echo) {
 			if p.IsVirtual() {
 				podcastType = "FILTER"
 				feedPath = "/rss/" + p.Id
-				episodes, err = database.GetRecentEpisodesFiltered(p.ParentId, p.TitleFilter, 5)
-				episodeCount = database.CountEpisodesFiltered(p.ParentId, p.TitleFilter)
+				episodes, err = database.GetRecentEpisodesFiltered(p.ParentId, p.TitleFilter, p.ExcludeTerms(), 5)
+				episodeCount = database.CountEpisodesFiltered(p.ParentId, p.TitleFilter, p.ExcludeTerms())
 				if p.CustomImage == "" && p.ImageUrl == "" {
 					if parent := database.GetPodcast(p.ParentId); parent != nil {
 						p.ImageUrl = parent.ImageUrl
@@ -166,6 +167,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 				LastFeedFetch: p.LastFeedFetch,
 				ParentId:      p.ParentId,
 				TitleFilter:   p.TitleFilter,
+				ExcludeFilter: p.ExcludeFilter,
 				SbCategories:  p.SponsorblockCategories,
 				ChannelId:     p.ChannelId,
 				ChannelTitle:  p.ChannelTitle,
@@ -330,15 +332,16 @@ func registerDashboardRoutes(e *echo.Echo) {
 			return echo.NewHTTPError(http.StatusNotFound, "Podcast not found")
 		}
 		sourceId, filter := p.Id, ""
+		var exclude []string
 		if p.IsVirtual() {
-			sourceId, filter = p.ParentId, p.TitleFilter
+			sourceId, filter, exclude = p.ParentId, p.TitleFilter, p.ExcludeTerms()
 		}
 		offset, _ := strconv.Atoi(c.QueryParam("offset"))
 		limit, _ := strconv.Atoi(c.QueryParam("limit"))
 		if limit <= 0 || limit > 100 {
 			limit = 50
 		}
-		episodes, total, err := database.SearchEpisodes(sourceId, filter, c.QueryParam("q"), offset, limit)
+		episodes, total, err := database.SearchEpisodes(sourceId, filter, exclude, c.QueryParam("q"), offset, limit)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
@@ -367,7 +370,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 		if p == nil || p.IsVirtual() {
 			return echo.NewHTTPError(http.StatusNotFound, "Podcast not found")
 		}
-		episodes, err := database.GetEpisodesFiltered(p.Id, "")
+		episodes, err := database.GetEpisodesFiltered(p.Id, "", nil)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
@@ -384,35 +387,64 @@ func registerDashboardRoutes(e *echo.Echo) {
 			return echo.NewHTTPError(http.StatusNotFound, "Podcast not found")
 		}
 		var req struct {
-			Filter string `json:"filter"`
+			Filter  string   `json:"filter"`
+			Exclude []string `json:"exclude"`
+			Name    string   `json:"name"`
 		}
-		if err := c.Bind(&req); err != nil || strings.TrimSpace(req.Filter) == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "Provide a filter string")
+		if err := c.Bind(&req); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
 		}
 		filter := strings.TrimSpace(req.Filter)
-		if database.CountEpisodesFiltered(parent.Id, filter) == 0 {
+		var exclude []string
+		for _, t := range req.Exclude {
+			if t = strings.TrimSpace(t); t != "" {
+				exclude = append(exclude, t)
+			}
+		}
+		if filter == "" && len(exclude) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "Provide a filter or exclusions")
+		}
+		if database.CountEpisodesFiltered(parent.Id, filter, exclude) == 0 {
 			return echo.NewHTTPError(http.StatusUnprocessableEntity, "No episodes match that filter")
 		}
-		virtualId := parent.Id + "~" + slugify(filter)
+
+		name := strings.TrimSpace(req.Name)
+		slugSrc := filter
+		description := "Filtered feed of " + parent.DisplayName() + " — episodes matching \"" + filter + "\""
+		if filter == "" {
+			if name == "" {
+				name = parent.DisplayName() + " (everything else)"
+			}
+			slugSrc = "everything-else"
+			description = "Feed of " + parent.DisplayName() + " excluding: " + strings.Join(exclude, ", ")
+		} else if name == "" {
+			name = filter
+			if len(exclude) > 0 {
+				description += ", excluding: " + strings.Join(exclude, ", ")
+			}
+		}
+
+		virtualId := parent.Id + "~" + slugify(slugSrc)
 		if database.GetPodcast(virtualId) != nil {
 			return echo.NewHTTPError(http.StatusConflict, "A feed for that filter already exists")
 		}
 		v := &models.Podcast{
-			Id:          virtualId,
-			ParentId:    parent.Id,
-			TitleFilter: filter,
-			PodcastName: filter,
-			Description: "Filtered feed of " + parent.DisplayName() + " — episodes matching \"" + filter + "\"",
-			ImageUrl:    parent.ImageUrl,
-			ArtistName:  parent.ArtistName,
-			Explicit:    parent.Explicit,
-			PostedDate:  parent.PostedDate,
+			Id:            virtualId,
+			ParentId:      parent.Id,
+			TitleFilter:   filter,
+			ExcludeFilter: strings.Join(exclude, "|"),
+			PodcastName:   name,
+			Description:   description,
+			ImageUrl:      parent.ImageUrl,
+			ArtistName:    parent.ArtistName,
+			Explicit:      parent.Explicit,
+			PostedDate:    parent.PostedDate,
 		}
 		database.SavePodcast(v)
-		events.Info("Created filtered feed %q from %s", filter, parent.DisplayName())
+		events.Info("Created filtered feed %q from %s", name, parent.DisplayName())
 		return c.JSON(http.StatusCreated, map[string]string{
 			"id":       virtualId,
-			"name":     filter,
+			"name":     name,
 			"feedPath": "/rss/" + virtualId,
 		})
 	})

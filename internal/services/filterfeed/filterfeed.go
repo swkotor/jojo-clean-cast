@@ -28,7 +28,7 @@ func BuildFilteredRssFeed(virtualId string, host string) []byte {
 		playlist.BuildPlaylistRssFeed(v.ParentId, host)
 	}
 
-	episodes, err := database.GetEpisodesFiltered(v.ParentId, v.TitleFilter)
+	episodes, err := database.GetEpisodesFiltered(v.ParentId, v.TitleFilter, v.ExcludeTerms())
 	if err != nil {
 		log.Error(err)
 		return nil

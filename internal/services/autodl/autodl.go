@@ -193,7 +193,7 @@ func recentEpisodesFor(p *models.Podcast) []models.PodcastEpisode {
 	var eps []models.PodcastEpisode
 	var err error
 	if p.IsVirtual() {
-		eps, err = database.GetRecentEpisodesFiltered(p.ParentId, p.TitleFilter, recentCount)
+		eps, err = database.GetRecentEpisodesFiltered(p.ParentId, p.TitleFilter, p.ExcludeTerms(), recentCount)
 	} else {
 		eps, err = database.GetRecentEpisodes(p.Id, recentCount)
 	}

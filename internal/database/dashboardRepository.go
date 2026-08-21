@@ -2,6 +2,8 @@ package database
 
 import (
 	"ikoyhn/podcast-sponsorblock/internal/models"
+
+	"gorm.io/gorm"
 )
 
 // GetAllPodcasts returns all subscribed podcasts ordered by name
@@ -27,33 +29,44 @@ func GetRecentEpisodes(podcastId string, limit int) ([]models.PodcastEpisode, er
 	return episodes, nil
 }
 
+// filteredQuery builds a query for a podcast's episodes with an optional
+// include filter and any number of exclude terms (all case-insensitive
+// substring matches on the episode title)
+func filteredQuery(podcastId, filter string, exclude []string) *gorm.DB {
+	query := db.Model(&models.PodcastEpisode{}).Where("podcast_id = ?", podcastId)
+	if filter != "" {
+		query = query.Where("episode_name LIKE ?", "%"+filter+"%")
+	}
+	for _, term := range exclude {
+		query = query.Where("episode_name NOT LIKE ?", "%"+term+"%")
+	}
+	return query
+}
+
 // GetRecentEpisodesFiltered returns the most recent N episodes whose titles
-// contain the filter (case-insensitive)
-func GetRecentEpisodesFiltered(podcastId, filter string, limit int) ([]models.PodcastEpisode, error) {
+// match the filter and avoid the exclude terms
+func GetRecentEpisodesFiltered(podcastId, filter string, exclude []string, limit int) ([]models.PodcastEpisode, error) {
 	var episodes []models.PodcastEpisode
-	err := db.Where("podcast_id = ? AND episode_name LIKE ?", podcastId, "%"+filter+"%").
+	err := filteredQuery(podcastId, filter, exclude).
 		Order("published_date DESC").
 		Limit(limit).
 		Find(&episodes).Error
 	return episodes, err
 }
 
-// GetEpisodesFiltered returns all episodes matching a title filter, newest first
-func GetEpisodesFiltered(podcastId, filter string) ([]models.PodcastEpisode, error) {
+// GetEpisodesFiltered returns all matching episodes, newest first
+func GetEpisodesFiltered(podcastId, filter string, exclude []string) ([]models.PodcastEpisode, error) {
 	var episodes []models.PodcastEpisode
-	err := db.Where("podcast_id = ? AND episode_name LIKE ?", podcastId, "%"+filter+"%").
+	err := filteredQuery(podcastId, filter, exclude).
 		Order("published_date DESC").
 		Find(&episodes).Error
 	return episodes, err
 }
 
 // SearchEpisodes returns a page of episodes for the browser, with optional
-// title search and filter, plus the total match count
-func SearchEpisodes(podcastId, filter, q string, offset, limit int) ([]models.PodcastEpisode, int64, error) {
-	query := db.Model(&models.PodcastEpisode{}).Where("podcast_id = ?", podcastId)
-	if filter != "" {
-		query = query.Where("episode_name LIKE ?", "%"+filter+"%")
-	}
+// title search plus the feed's filter/excludes, and the total match count
+func SearchEpisodes(podcastId, filter string, exclude []string, q string, offset, limit int) ([]models.PodcastEpisode, int64, error) {
+	query := filteredQuery(podcastId, filter, exclude)
 	if q != "" {
 		query = query.Where("episode_name LIKE ?", "%"+q+"%")
 	}
@@ -71,12 +84,10 @@ func GetChildFeeds(parentId string) []models.Podcast {
 	return podcasts
 }
 
-// CountEpisodesFiltered counts episodes matching a title filter
-func CountEpisodesFiltered(podcastId, filter string) int64 {
+// CountEpisodesFiltered counts episodes matching a filter and excludes
+func CountEpisodesFiltered(podcastId, filter string, exclude []string) int64 {
 	var count int64
-	db.Model(&models.PodcastEpisode{}).
-		Where("podcast_id = ? AND episode_name LIKE ?", podcastId, "%"+filter+"%").
-		Count(&count)
+	filteredQuery(podcastId, filter, exclude).Count(&count)
 	return count
 }
 
