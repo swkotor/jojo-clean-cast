@@ -244,6 +244,8 @@ type Podcast struct {
 	INewFeedURL string  `xml:"itunes:new-feed-url,omitempty"`
 	IOwner      *Author // Author is formatted for itunes as-is
 	ICategories []*ICategory
+	// Channel-level artwork. Apple Podcasts reads this rather than <image>.
+	IImage *IImage
 
 	Items []*Item `xml:"item"`
 
@@ -406,6 +408,13 @@ func (p *Podcast) AddImage(url string) {
 		Title: p.Title,
 		Link:  p.Link,
 	}
+	p.IImage = &IImage{Href: url}
+}
+
+// IImage represents channel-level itunes artwork.
+type IImage struct {
+	XMLName xml.Name `xml:"itunes:image"`
+	Href    string   `xml:"href,attr"`
 }
 
 // AddItem adds the podcast episode.  It returns a count of Items added or any

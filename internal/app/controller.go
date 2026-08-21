@@ -192,7 +192,11 @@ func setupHandlers(e *echo.Echo) {
 
 func handler(r *http.Request) string {
 	var scheme string
-	if r.TLS != nil {
+	// Honour the proxy's scheme (Cloudflare terminates TLS for us) so that
+	// media and artwork URLs in an https feed are also https.
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = strings.Split(proto, ",")[0]
+	} else if r.TLS != nil {
 		scheme = "https"
 	} else {
 		scheme = "http"
