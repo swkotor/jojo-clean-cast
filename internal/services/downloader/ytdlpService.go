@@ -61,6 +61,16 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 		downloadDir = config.AppConfig.Setup.AudioDir
 	}
 
+	// Download into a staging directory on the same filesystem, then move the
+	// finished file into place with an atomic rename. Writing directly to the
+	// live file lets a podcast client stream a half-written (or re-cut) file,
+	// which produces audible splices — audio from another part of the show.
+	stagingDir := filepath.Join(downloadDir, ".incoming")
+	if mkErr := os.MkdirAll(stagingDir, 0o755); mkErr != nil {
+		log.Errorf("Could not create staging dir %s: %v", stagingDir, mkErr)
+		stagingDir = downloadDir
+	}
+
 	categories := config.AppConfig.Ytdlp.SponsorBlockCategories
 	if sbOverride != "" {
 		categories = sbOverride
@@ -77,7 +87,7 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 		NoPlaylist().
 		FFmpegLocation("/usr/bin/ffmpeg").
 		Continue().
-		Paths(downloadDir).
+		Paths(stagingDir).
 		ProgressFunc(4000*time.Millisecond, func(prog ytdlp.ProgressUpdate) {
 			ytdlpProgress(&etaNotified, prog, title)
 		}).
@@ -106,6 +116,7 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 		r, dlErr := dl.Run(context.TODO(), youtubeVideoUrl+youtubeVideoId)
 
 		if r == nil {
+			promoteStagedFile(stagingDir, downloadDir, youtubeVideoId)
 			if database.FileExistsWithId(config.AppConfig.Setup.AudioDir, youtubeVideoId) {
 				ntfy.SendNotification("Download completed!", "Clean Cast - Success")
 				log.Warn("Download returned no result, but file exists: ", youtubeVideoId)
@@ -117,6 +128,7 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 		}
 
 		if r.ExitCode != 0 {
+			promoteStagedFile(stagingDir, downloadDir, youtubeVideoId)
 			if database.FileExistsWithId(config.AppConfig.Setup.AudioDir, youtubeVideoId) {
 				ntfy.SendNotification("Download completed!", "Clean Cast - Success")
 				log.Warn("Download exited with non-zero code, but file exists: ", youtubeVideoId)
@@ -130,6 +142,11 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 				}
 			}
 		} else {
+			if err := promoteStagedFile(stagingDir, downloadDir, youtubeVideoId); err != nil {
+				events.Error("Could not move finished download into place for %s: %v", title, err)
+				log.Errorf("[DOWNLOAD] promote failed for %s: %v", youtubeVideoId, err)
+				return
+			}
 			log.Infof("%s download completed successfully.", title)
 			ntfy.SendNotification(fmt.Sprintf("%s download success!", title), "Clean Cast - Success")
 		}
@@ -156,4 +173,45 @@ func ytdlpProgress(etaNotified *uint32, prog ytdlp.ProgressUpdate, title string)
 			}
 		}
 	}
+}
+
+
+// promoteStagedFile atomically moves a finished download from the staging
+// directory into the podcast's folder, replacing any previous version.
+func promoteStagedFile(stagingDir, downloadDir, youtubeVideoId string) error {
+	if stagingDir == downloadDir {
+		return nil
+	}
+	entries, err := os.ReadDir(stagingDir)
+	if err != nil {
+		return err
+	}
+	moved := false
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, youtubeVideoId+".") {
+			continue
+		}
+		// ignore yt-dlp working files
+		if strings.HasSuffix(name, ".part") || strings.HasSuffix(name, ".ytdl") ||
+			strings.Contains(name, ".part-") || strings.HasSuffix(name, ".temp") {
+			continue
+		}
+		src := filepath.Join(stagingDir, name)
+		dst := filepath.Join(downloadDir, name)
+		if err := os.Rename(src, dst); err != nil {
+			return err
+		}
+		moved = true
+	}
+	if !moved {
+		return nil
+	}
+	// clean up any leftovers for this video in staging
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), youtubeVideoId+".") {
+			os.Remove(filepath.Join(stagingDir, entry.Name()))
+		}
+	}
+	return nil
 }

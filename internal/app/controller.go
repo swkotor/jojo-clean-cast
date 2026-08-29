@@ -106,13 +106,18 @@ func registerRoutes(e *echo.Echo) {
 			}
 		}
 
-		defer file.Close()
-		rangeHeader := c.Request().Header.Get("Range")
-		if rangeHeader != "" {
-			http.ServeFile(c.Response().Writer, c.Request(), filePath)
-			return nil
-		}
-		return c.Stream(http.StatusOK, "audio/mp4", file)
+		file.Close()
+
+		// Always serve through http.ServeFile: it sets Content-Length and
+		// Last-Modified and handles Range/If-Range correctly. That matters
+		// because an episode can be re-cut (new SponsorBlock segments) while a
+		// client is still fetching it — with If-Range the client restarts
+		// cleanly instead of splicing bytes from two different versions, which
+		// is heard as audio jumping to another part of the show.
+		c.Response().Header().Set("Content-Type", "audio/mp4")
+		c.Response().Header().Set("Accept-Ranges", "bytes")
+		http.ServeFile(c.Response().Writer, c.Request(), filePath)
+		return nil
 	})
 
 	port := os.Getenv("PORT")
