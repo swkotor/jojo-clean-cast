@@ -9,7 +9,6 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/services/downloader"
 	"ikoyhn/podcast-sponsorblock/internal/services/filterfeed"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
-	"ikoyhn/podcast-sponsorblock/internal/services/sponsorblock"
 	"net"
 	"net/http"
 	"os"
@@ -87,17 +86,28 @@ func registerRoutes(e *echo.Echo) {
 			return echo.NewHTTPError(http.StatusInternalServerError, "Server config error")
 		}
 
-		needRedownload, totalTimeSkipped := sponsorblock.DeterminePodcastDownload(youtubeVideoId)
-		database.UpdateEpisodePlaybackHistory(youtubeVideoId, totalTimeSkipped)
+		// Only the ACCESS time is refreshed here. Overwriting the skip
+		// baseline on a serve would erase the difference the drift check
+		// exists to spot.
+		database.TouchEpisodeAccess(youtubeVideoId)
 
 		filePath := database.FindFileWithId(audioDirAbs, youtubeVideoId)
 		file, err := os.Open(filePath)
 
-		if file == nil || err != nil || needRedownload {
+		// A podcast client fetches a large episode over MANY range requests.
+		// Re-downloading here — which the old code did whenever SponsorBlock's
+		// segment total differed from the stored one — replaces the file
+		// mid-fetch, so the client stitches together byte ranges from two
+		// different cuts of the show and you hear audio from somewhere else
+		// (music beds from a removed ad, most audibly). An episode that is
+		// already on disk is therefore ALWAYS served as-is; keeping its cuts
+		// current is the background poller's job, and it only does it when the
+		// episode has been idle long enough that nobody is mid-download.
+		if file == nil || err != nil {
 			if file != nil {
 				file.Close()
 			}
-			<-downloader.GetYoutubeVideo(youtubeVideoId, needRedownload)
+			<-downloader.GetYoutubeVideo(youtubeVideoId, false)
 			filePath = database.FindFileWithId(audioDirAbs, youtubeVideoId)
 			file, err = os.Open(filePath)
 			if err != nil || file == nil {

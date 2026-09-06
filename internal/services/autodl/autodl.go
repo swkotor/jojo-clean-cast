@@ -9,6 +9,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/services/downloader"
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
+	"ikoyhn/podcast-sponsorblock/internal/services/sponsorblock"
 	"os"
 	"path/filepath"
 	"sort"
@@ -203,6 +204,70 @@ func recentEpisodesFor(p *models.Podcast) []models.PodcastEpisode {
 	return eps
 }
 
+// How long an episode must have gone untouched before we are willing to
+// replace its file. A podcast client pulls a long episode over many range
+// requests spread over minutes; swapping the file underneath it splices in
+// audio from a different cut of the show. Idle-gating is what makes a re-cut
+// safe, so this wants to be comfortably longer than a slow client's download.
+const recutIdlePeriod = 45 * time.Minute
+
+// refreshChangedCuts re-downloads episodes whose SponsorBlock segments have
+// changed since the file was written. This used to happen inline on the media
+// endpoint, which is exactly what corrupted in-flight downloads; here it can
+// only touch episodes nobody has asked for recently.
+func refreshChangedCuts() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("[AUTODL] re-cut pass panic: %v", r)
+		}
+	}()
+
+	audioDirAbs, err := filepath.Abs(config.AppConfig.Setup.AudioDir)
+	if err != nil {
+		return
+	}
+	episodes, err := database.GetAllPlaybackHistory()
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-recutIdlePeriod).Unix()
+	for _, h := range episodes {
+		if h.YoutubeVideoId == "" || h.LastAccessDate > cutoff {
+			continue // recently served — a client may still be fetching it
+		}
+		if IsDownloading(h.YoutubeVideoId) || inBackoff(h.YoutubeVideoId) {
+			continue
+		}
+		if !database.FileExistsWithId(audioDirAbs, h.YoutubeVideoId) {
+			continue
+		}
+		current := sponsorblock.TotalSponsorTimeSkipped(h.YoutubeVideoId)
+		// A miss (0) is ambiguous — SponsorBlock being unreachable looks the
+		// same as "no segments". Only act when there is something to cut, so a
+		// flaky lookup can never wipe out an episode's existing cuts.
+		if current <= 0 || absDiff(current, h.TotalTimeSkipped) <= 2 {
+			continue
+		}
+		events.Info("SponsorBlock segments changed, re-cutting %s (%.0fs -> %.0fs)",
+			h.YoutubeVideoId, h.TotalTimeSkipped, current)
+		inProgress.Store(h.YoutubeVideoId, time.Now())
+		select {
+		case <-downloader.GetYoutubeVideo(h.YoutubeVideoId, true):
+		case <-time.After(2 * time.Hour):
+			events.Error("Re-cut timed out: %s", h.YoutubeVideoId)
+		}
+		inProgress.Delete(h.YoutubeVideoId)
+		return // one per pass — re-cuts are maintenance, not a priority
+	}
+}
+
+func absDiff(a, b float64) float64 {
+	if a > b {
+		return a - b
+	}
+	return b - a
+}
+
 func runOnce() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -216,6 +281,8 @@ func runOnce() {
 		events.Error("Auto-download: could not list podcasts: %v", err)
 		return
 	}
+
+	defer refreshChangedCuts()
 
 	// group children under parents
 	children := map[string][]models.Podcast{}

@@ -8,6 +8,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/services/common"
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/ntfy"
+	"ikoyhn/podcast-sponsorblock/internal/services/sponsorblock"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,6 +119,7 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 		if r == nil {
 			promoteStagedFile(stagingDir, downloadDir, youtubeVideoId)
 			if database.FileExistsWithId(config.AppConfig.Setup.AudioDir, youtubeVideoId) {
+				database.SetSkipBaseline(youtubeVideoId, sponsorblock.TotalSponsorTimeSkipped(youtubeVideoId))
 				ntfy.SendNotification("Download completed!", "Clean Cast - Success")
 				log.Warn("Download returned no result, but file exists: ", youtubeVideoId)
 			} else {
@@ -130,6 +132,7 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 		if r.ExitCode != 0 {
 			promoteStagedFile(stagingDir, downloadDir, youtubeVideoId)
 			if database.FileExistsWithId(config.AppConfig.Setup.AudioDir, youtubeVideoId) {
+				database.SetSkipBaseline(youtubeVideoId, sponsorblock.TotalSponsorTimeSkipped(youtubeVideoId))
 				ntfy.SendNotification("Download completed!", "Clean Cast - Success")
 				log.Warn("Download exited with non-zero code, but file exists: ", youtubeVideoId)
 			} else {
@@ -147,6 +150,10 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 				log.Errorf("[DOWNLOAD] promote failed for %s: %v", youtubeVideoId, err)
 				return
 			}
+			// Record what SponsorBlock removed from THIS file, so a later
+			// serve doesn't mistake "no baseline" for "the segments changed"
+			// and re-download the episode out from under a streaming client.
+			database.SetSkipBaseline(youtubeVideoId, sponsorblock.TotalSponsorTimeSkipped(youtubeVideoId))
 			log.Infof("%s download completed successfully.", title)
 			ntfy.SendNotification(fmt.Sprintf("%s download success!", title), "Clean Cast - Success")
 		}

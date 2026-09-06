@@ -27,6 +27,42 @@ func UpdateEpisodePlaybackHistory(youtubeVideoId string, totalTimeSkipped float6
 		FirstOrCreate(&history)
 }
 
+// GetAllPlaybackHistory returns every tracked episode — the re-cut pass walks
+// this to spot files whose SponsorBlock segments have changed since download.
+func GetAllPlaybackHistory() ([]models.EpisodePlaybackHistory, error) {
+	var rows []models.EpisodePlaybackHistory
+	err := db.Find(&rows).Error
+	return rows, err
+}
+
+// SetSkipBaseline records how much SponsorBlock time was cut from the file that
+// is now on disk. This is the BASELINE the drift check compares against: if
+// SponsorBlock's segments later change, current-total != baseline and the
+// episode is due a re-cut. It must be written whenever a file is (re)downloaded
+// — an auto-downloaded episode with no row previously read as "0s were cut",
+// which made the very first client request look like a segment change and
+// triggered a full re-download in the middle of that client's fetch.
+func SetSkipBaseline(youtubeVideoId string, totalTimeSkipped float64) {
+	var history models.EpisodePlaybackHistory
+	db.Where(models.EpisodePlaybackHistory{YoutubeVideoId: youtubeVideoId}).
+		Assign(map[string]interface{}{
+			"last_access_date":   time.Now().Unix(),
+			"total_time_skipped": totalTimeSkipped,
+		}).
+		FirstOrCreate(&history)
+}
+
+// TouchEpisodeAccess refreshes only the last-access time. Serving an episode
+// must NOT overwrite the skip baseline: doing so erases the very difference the
+// drift check exists to detect, and (with the old code) meant a re-cut could
+// only ever be triggered by a missing row.
+func TouchEpisodeAccess(youtubeVideoId string) {
+	var history models.EpisodePlaybackHistory
+	db.Where(models.EpisodePlaybackHistory{YoutubeVideoId: youtubeVideoId}).
+		Assign(map[string]interface{}{"last_access_date": time.Now().Unix()}).
+		FirstOrCreate(&history)
+}
+
 func GetEpisodePlaybackHistory(youtubeVideoId string) *models.EpisodePlaybackHistory {
 	var history models.EpisodePlaybackHistory
 	db.Where("youtube_video_id = ?", youtubeVideoId).First(&history)

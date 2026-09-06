@@ -175,6 +175,18 @@ func FileExistsWithId(baseDir, videoId string) bool {
 
 // ListAudioFileNames returns the basenames of all audio files in baseDir
 // and its immediate subdirectories
+// isAudioFile keeps sidecars out of the episode list. Without this, a
+// podcast folder's metadata.json and cover.jpg were tracked as if they were
+// episodes, creating junk playback-history rows (and pointless SponsorBlock
+// lookups for a "video" called "cover").
+func isAudioFile(name string) bool {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".m4a", ".mp3", ".opus", ".ogg", ".aac", ".webm", ".mp4", ".flac", ".wav":
+		return true
+	}
+	return false
+}
+
 func ListAudioFileNames(baseDir string) []string {
 	var names []string
 	entries, err := os.ReadDir(baseDir)
@@ -183,7 +195,9 @@ func ListAudioFileNames(baseDir string) []string {
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			names = append(names, entry.Name())
+			if isAudioFile(entry.Name()) {
+				names = append(names, entry.Name())
+			}
 			continue
 		}
 		subEntries, err := os.ReadDir(path.Join(baseDir, entry.Name()))
@@ -191,7 +205,7 @@ func ListAudioFileNames(baseDir string) []string {
 			continue
 		}
 		for _, sub := range subEntries {
-			if !sub.IsDir() {
+			if !sub.IsDir() && isAudioFile(sub.Name()) {
 				names = append(names, sub.Name())
 			}
 		}
