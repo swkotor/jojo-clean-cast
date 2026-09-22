@@ -47,3 +47,39 @@ func TestParseLastBuildDate_RejectsGarbage(t *testing.T) {
 		t.Fatal("expected an error for an unparseable value")
 	}
 }
+
+func TestParseDuration(t *testing.T) {
+	cases := []struct {
+		in   string
+		want time.Duration
+		ok   bool
+	}{
+		{"PT2H56M18S", 2*time.Hour + 56*time.Minute + 18*time.Second, true},
+		{"PT41M5S", 41*time.Minute + 5*time.Second, true},
+		{"PT1H", time.Hour, true},
+		{"PT0S", 0, true},
+		// YouTube reports these for upcoming premieres / unprocessed lives —
+		// the old parser errored on them on every feed refresh
+		{"P0D", 0, true},
+		{"P1DT2H", 26 * time.Hour, true},
+		{"P1W", 7 * 24 * time.Hour, true},
+		{"garbage", 0, false},
+		{"", 0, false},
+	}
+	for _, c := range cases {
+		got, err := ParseDuration(c.in)
+		if c.ok && err != nil {
+			t.Errorf("ParseDuration(%q) unexpected error: %v", c.in, err)
+			continue
+		}
+		if !c.ok {
+			if err == nil {
+				t.Errorf("ParseDuration(%q) expected error, got %v", c.in, got)
+			}
+			continue
+		}
+		if got != c.want {
+			t.Errorf("ParseDuration(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}

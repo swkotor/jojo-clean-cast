@@ -12,7 +12,10 @@ FROM alpine
 
 WORKDIR /app
 COPY --from=builder /app/cmd/app/main .
-RUN apk add --no-cache ffmpeg
+# fork: nodejs is the JS runtime for yt-dlp's YouTube extractor. Without one,
+# yt-dlp uses a deprecated no-JS path and YouTube intermittently answers
+# 403 Forbidden ("No supported JavaScript runtime could be found").
+RUN apk add --no-cache ffmpeg nodejs
 
 ENV PORT=8080
 HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \

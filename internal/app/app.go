@@ -25,7 +25,7 @@ func Start() {
 	if _, err := ytdlp.Install(ctx, &ytdlp.InstallOptions{AllowVersionMismatch: true}); err != nil {
 		panic(err)
 	}
-	if _, err := ytdlp.New().Update(ctx); err != nil {
+	if _, err := ytdlp.New().SetSeparateProcessGroup(true).Update(ctx); err != nil {
 		log.Warnf("yt-dlp self-update failed, continuing with current version: %v", err)
 	}
 

@@ -80,6 +80,13 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 
 	var etaNotified uint32 = 0
 	dl := ytdlp.New().
+		// fork: yt-dlp needs a JS runtime for YouTube's player challenges;
+		// node is installed in the image (deno has no musl build). Without
+		// it the deprecated no-JS path intermittently gets 403 Forbidden.
+		JsRuntimes("node").
+		// fork: keep yt-dlp/ffmpeg in their own process group so nothing
+		// they do with signals can reach PID 1.
+		SetSeparateProcessGroup(true).
 		NoProgress().
 		Format("bestaudio[ext=m4a]/bestaudio[ext=aac]/bestaudio[ext=opus]/bestaudio[ext=vorbis]/bestaudio/best").
 		SponsorblockRemove(categories).

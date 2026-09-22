@@ -22,7 +22,24 @@ dashboard and automation features, deployed on Unraid as `jojo-podcasts`.
 - **Auth**: LAN requests skip token auth; proxied (Cloudflare) requests
   require `?token=`
 - **yt-dlp self-update** to nightly at startup and daily (fixes recurring
-  YouTube 403 breakage, upstream issue #112)
+  YouTube 403 breakage, upstream issue #112). The updater runs in its own
+  process group and logs a marker before it starts (the app used to die
+  silently, exit 0, at exactly the daily-update tick).
+- **yt-dlp JS runtime**: image ships `nodejs` and downloads pass
+  `--js-runtimes node` — without a JS runtime yt-dlp's deprecated no-JS
+  YouTube path intermittently got 403 Forbidden.
+- **On-demand download failures now retried**: `/media` only touches playback
+  history after a successful serve (a failed download used to create the row,
+  which auto-download read as "already served — skip forever"), and failures
+  feed the same backoff/badge tracking as the poller.
+- **Restart-proof "served" markers**: startup file-tracking no longer deletes
+  playback-history rows of cleaned-up known episodes (upstream's delete
+  caused a full re-download of every feed's recent episodes after each
+  restart).
+- **ISO-8601 durations parsed properly** (`P0D` premieres/lives skipped
+  quietly instead of erroring on every refresh).
+- **SponsorBlock 404s cached 6h** (the re-cut pass was polling every episode
+  every 30 min and spamming "Video not found").
 - **Per-podcast storage** in `AUDIO_DIR/<podcast title>/`
 - `/healthz` + Docker HEALTHCHECK
 

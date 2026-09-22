@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/labstack/gommon/log"
@@ -16,6 +17,16 @@ import (
 const SPONSORBLOCK_API_URL = "https://sponsor.ajay.app/api/skipSegments?videoID="
 
 var sponsorBlockClient = &http.Client{Timeout: 15 * time.Second}
+
+// fork: episodes with no submitted segments 404 on every lookup, and the
+// re-cut pass polls every tracked episode every half hour — which hammered
+// the API and logged "Video not found" warnings around the clock. Remember
+// misses for a while; segments appearing a few hours late only delays a
+// re-cut, it never loses one.
+var (
+	sbMissMu    sync.Mutex
+	sbMissUntil = map[string]time.Time{}
+)
 
 func DeterminePodcastDownload(youtubeVideoId string) (bool, float64) {
 	episodeHistory := database.GetEpisodePlaybackHistory(youtubeVideoId)
@@ -34,6 +45,12 @@ func DeterminePodcastDownload(youtubeVideoId string) (bool, float64) {
 }
 
 func TotalSponsorTimeSkipped(youtubeVideoId string) float64 {
+	sbMissMu.Lock()
+	until, missed := sbMissUntil[youtubeVideoId]
+	sbMissMu.Unlock()
+	if missed && time.Now().Before(until) {
+		return 0
+	}
 	log.Debug("[SponsorBlock] Looking up podcast in SponsorBlock API...")
 	endURL := SPONSORBLOCK_API_URL + youtubeVideoId
 
@@ -51,7 +68,10 @@ func TotalSponsorTimeSkipped(youtubeVideoId string) float64 {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		log.Warnf("Video not found on SponsorBlock API: %s", youtubeVideoId)
+		sbMissMu.Lock()
+		sbMissUntil[youtubeVideoId] = time.Now().Add(6 * time.Hour)
+		sbMissMu.Unlock()
+		log.Debugf("[SponsorBlock] no segments for %s (rechecking in 6h)", youtubeVideoId)
 		return 0
 	}
 

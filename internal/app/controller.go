@@ -4,6 +4,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/models"
+	"ikoyhn/podcast-sponsorblock/internal/services/autodl"
 	"ikoyhn/podcast-sponsorblock/internal/services/channel"
 	"ikoyhn/podcast-sponsorblock/internal/services/common"
 	"ikoyhn/podcast-sponsorblock/internal/services/downloader"
@@ -86,11 +87,6 @@ func registerRoutes(e *echo.Echo) {
 			return echo.NewHTTPError(http.StatusInternalServerError, "Server config error")
 		}
 
-		// Only the ACCESS time is refreshed here. Overwriting the skip
-		// baseline on a serve would erase the difference the drift check
-		// exists to spot.
-		database.TouchEpisodeAccess(youtubeVideoId)
-
 		filePath := database.FindFileWithId(audioDirAbs, youtubeVideoId)
 		file, err := os.Open(filePath)
 
@@ -111,12 +107,26 @@ func registerRoutes(e *echo.Echo) {
 			filePath = database.FindFileWithId(audioDirAbs, youtubeVideoId)
 			file, err = os.Open(filePath)
 			if err != nil || file == nil {
+				// fork: count this as a failed attempt so the auto-downloader
+				// backs off and RETRIES it later, and show the failure badge
+				// on the dashboard. Crucially, playback history is NOT touched
+				// on this path (see below).
+				autodl.NoteFailure(youtubeVideoId)
 				log.Errorf("[MEDIA] No file available for %s: %v", youtubeVideoId, err)
 				return echo.NewHTTPError(http.StatusNotFound, "Episode unavailable")
 			}
 		}
 
 		file.Close()
+
+		// Only the ACCESS time is refreshed here, and only once the file is
+		// really about to be served. Overwriting the skip baseline on a serve
+		// would erase the difference the drift check exists to spot — and
+		// touching history BEFORE the download (as this used to) created a
+		// playback-history row even when the download FAILED, which the
+		// auto-downloader read as "already served, skip" and the episode was
+		// then never fetched again without manual intervention.
+		database.TouchEpisodeAccess(youtubeVideoId)
 
 		// Always serve through http.ServeFile: it sets Content-Length and
 		// Last-Modified and handles Range/If-Range correctly. That matters

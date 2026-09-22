@@ -1,6 +1,9 @@
 package common
 
 import (
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -43,17 +46,35 @@ func ParseLastBuildDate(value string) (time.Time, error) {
 	return time.Parse(time.RFC1123, value)
 }
 
+var iso8601DurationRe = regexp.MustCompile(
+	`^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$`)
+
+// ParseDuration parses an ISO-8601 duration as the YouTube API returns it.
+// fork: the old implementation only rewrote "PT#H#M#S" into Go syntax, so any
+// duration with a date part failed — including "P0D", which YouTube reports
+// for upcoming premieres and still-processing live streams. That logged
+// `time: invalid duration "P0D"` on every feed refresh, forever, for any
+// playlist containing a scheduled premiere.
 func ParseDuration(durationStr string) (time.Duration, error) {
-	// Remove the 'PT' prefix from the duration string
-	durationStr = strings.Replace(durationStr, "PT", "", 1)
-
-	// Replace 'H' with 'h', 'M' with 'm', and 'S' with 's'
-	durationStr = strings.Replace(durationStr, "H", "h", 1)
-	durationStr = strings.Replace(durationStr, "M", "m", 1)
-	durationStr = strings.Replace(durationStr, "S", "s", 1)
-
-	// Parse the duration string
-	return time.ParseDuration(durationStr)
+	m := iso8601DurationRe.FindStringSubmatch(strings.TrimSpace(durationStr))
+	if m == nil {
+		return 0, fmt.Errorf("invalid ISO-8601 duration %q", durationStr)
+	}
+	atoi := func(s string) int {
+		if s == "" {
+			return 0
+		}
+		n, _ := strconv.Atoi(s)
+		return n
+	}
+	secs := 0.0
+	if m[5] != "" {
+		secs, _ = strconv.ParseFloat(m[5], 64)
+	}
+	d := time.Duration(atoi(m[1])*7*24+atoi(m[2])*24+atoi(m[3]))*time.Hour +
+		time.Duration(atoi(m[4]))*time.Minute +
+		time.Duration(secs*float64(time.Second))
+	return d, nil
 }
 
 // SanitizeDirName turns a podcast title into a safe directory name

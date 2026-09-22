@@ -136,7 +136,14 @@ func GetVideosAndValidate(videoIdsNotSaved []string, podcastType enum.PodcastTyp
 		if item.Id != "" {
 			duration, err := common.ParseDuration(item.ContentDetails.Duration)
 			if err != nil {
-				log.Error(err)
+				log.Errorf("could not parse duration %q for video %s: %v",
+					item.ContentDetails.Duration, item.Id, err)
+				continue
+			}
+			// fork: zero duration means an upcoming premiere or a live stream
+			// still being processed — it gets a real duration once it airs,
+			// and a later refresh will pick it up. Nothing to report.
+			if duration <= 0 {
 				continue
 			}
 

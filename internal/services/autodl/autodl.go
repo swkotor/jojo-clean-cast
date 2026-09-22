@@ -112,6 +112,13 @@ func Download(videoId, episodeName string) {
 	}
 }
 
+// NoteFailure records a failed download attempt from outside this package
+// (the on-demand /media path) so retry backoff and the dashboard failure
+// badge apply to those failures too.
+func NoteFailure(videoId string) {
+	recordFailure(videoId)
+}
+
 func recordFailure(videoId string) {
 	f := failInfo{Count: 1, Last: time.Now()}
 	if v, ok := failures.Load(videoId); ok {
@@ -165,7 +172,12 @@ func updateYtdlp() {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	r, err := ytdlp.New().UpdateTo(ctx, "nightly")
+	// fork: log BEFORE running. The app died silently (exit 0, nothing in the
+	// logs) every night at exactly the daily-update tick for weeks; if that
+	// ever happens again, this marker pinpoints it. The updater also runs in
+	// its own process group so it cannot signal PID 1.
+	log.Info("[AUTODL] running yt-dlp self-update...")
+	r, err := ytdlp.New().SetSeparateProcessGroup(true).UpdateTo(ctx, "nightly")
 	if err != nil {
 		events.Error("yt-dlp self-update failed: %v", err)
 		return

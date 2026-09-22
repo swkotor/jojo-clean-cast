@@ -125,7 +125,17 @@ func TrackEpisodeFiles() {
 		if !common.IsValidID(dbFile) {
 			continue
 		}
+		// fork: a history row whose file is gone is normally an episode the
+		// cleanup pass reclaimed on purpose ("served, file deleted"). Upstream
+		// deletes the row here, which un-marked every cleaned-up episode on
+		// each restart — the auto-downloader then re-fetched the latest
+		// episodes of every feed after every restart (a nightly re-download
+		// storm while the app was restarting daily). Keep rows that belong to
+		// a known episode; only delete true orphans.
+		if ep, err := GetEpisodeByVideoId(dbFile); err == nil && ep != nil {
+			continue
+		}
 		db.Where("youtube_video_id = ?", dbFile).Delete(&models.EpisodePlaybackHistory{})
-		log.Info("[DB] Deleted non-existent episode playback history... " + dbFile)
+		log.Info("[DB] Deleted stale playback history (no matching episode): " + dbFile)
 	}
 }
