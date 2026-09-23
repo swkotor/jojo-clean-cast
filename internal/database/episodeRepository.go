@@ -99,13 +99,25 @@ func GetPodcastEpisodesByPodcastId(podcastId string, podcastType enum.PodcastTyp
 	return episodes, nil
 }
 
-func DeletePodcastCronJob() {
+// DeletePodcastCronJob reclaims space from episodes a device fetched long ago.
+//
+// `isBusy` is injected rather than imported to avoid an import cycle (the
+// download packages already depend on this one); it reports whether a download
+// for that id is running right now.
+func DeletePodcastCronJob(isBusy func(string) bool) {
 	oneWeekAgo := time.Now().Add(-7 * 24 * time.Hour).Unix()
 
 	var histories []models.EpisodePlaybackHistory
-	db.Where("last_access_date < ?", oneWeekAgo).Find(&histories)
+	// served only: an episode nobody has fetched must not be aged out here.
+	// This used to match on last_access_date alone, which is also set when the
+	// file is downloaded — so it deleted un-listened episodes, and by dropping
+	// the row it also discarded the flag that stops them being re-fetched.
+	db.Where("last_access_date < ? AND served = ?", oneWeekAgo, true).Find(&histories)
 
 	for _, history := range histories {
+		if isBusy != nil && isBusy(history.YoutubeVideoId) {
+			continue
+		}
 		filePath := FindFileWithId(config.AppConfig.Setup.AudioDir, history.YoutubeVideoId)
 		if filePath == "" {
 			log.Debug("[DB] File not found when attempting to delete for video: " + history.YoutubeVideoId)
@@ -121,12 +133,15 @@ func DeletePodcastCronJob() {
 			}
 		}
 
-		if delErr := db.Delete(&history).Error; delErr != nil {
-			log.Error("[DB] Failed to delete playback history for " + history.YoutubeVideoId + ": " + delErr.Error())
+		// Keep the row. It carries `served`, which is what stops the auto
+		// downloader immediately fetching the episode again; deleting it turned
+		// this job into a weekly re-download loop.
+		if upErr := db.Model(&history).Update("total_time_skipped", 0).Error; upErr != nil {
+			log.Error("[DB] Failed to reset playback history for " + history.YoutubeVideoId + ": " + upErr.Error())
 			continue
 		}
 
-		log.Info("[DB] Deleted old episode playback history... " + history.YoutubeVideoId)
+		log.Info("[DB] Reclaimed space from old served episode... " + history.YoutubeVideoId)
 	}
 }
 

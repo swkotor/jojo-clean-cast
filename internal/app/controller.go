@@ -52,8 +52,16 @@ func registerRoutes(e *echo.Echo) {
 		if err := checkAuthentication(c); err != nil {
 			return err
 		}
-		if _, err := validateQueryParams(c); err != nil {
+		params, err := validateQueryParams(c)
+		if err != nil {
 			return err
+		}
+		// The playlist/filtered feed builders take no limit or date, so these
+		// were accepted and then silently ignored — a user capping a 500-episode
+		// back catalogue still got the whole thing. Say so instead of lying.
+		if params.Limit != nil || params.Date != nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				"limit and date are only supported on /channel feeds")
 		}
 		playlistId := strings.Split(c.Param("youtubePlaylistId"), "&")[0]
 		database.TouchFeedFetch(playlistId, time.Now().Unix())
@@ -215,7 +223,9 @@ func setupCron() {
 		schedule, _ = cron.ParseStandard("0 0 * * 0")
 	}
 	c := cron.New()
-	c.Schedule(schedule, cron.FuncJob(database.DeletePodcastCronJob))
+	c.Schedule(schedule, cron.FuncJob(func() {
+		database.DeletePodcastCronJob(autodl.IsDownloading)
+	}))
 	c.Start()
 }
 

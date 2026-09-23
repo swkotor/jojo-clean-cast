@@ -39,9 +39,12 @@ func BuildFilteredRssFeed(virtualId string, host string) []byte {
 		if parent := database.GetPodcast(v.ParentId); parent != nil {
 			v.ImageUrl = parent.ImageUrl
 			// art is served at /covers/<virtualId>, which falls back to the parent
-			if parent.CustomImage != "" || parent.AutoImage != "" {
-				v.AutoImage = parent.AutoImage
-			}
+			// Copy BOTH: with only AutoImage carried over, a parent whose art
+			// is a user-uploaded custom cover left the sub-feed with neither
+			// set, so it fell back to publishing YouTube's signed CDN URL —
+			// exactly the expiring link /covers exists to avoid.
+			v.CustomImage = parent.CustomImage
+			v.AutoImage = parent.AutoImage
 			if v.ArtistName == "" {
 				v.ArtistName = parent.ArtistName
 			}

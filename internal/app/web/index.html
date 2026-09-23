@@ -330,7 +330,13 @@ function esc(s) {
 function jsq(v) {
   return JSON.stringify(String(v == null ? '' : v))
     .replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026').replace(/'/g, '\\u0027');
+    .replace(/&/g, '\\u0026').replace(/'/g, '\\u0027')
+    // ...and the quote JSON.stringify itself uses. These literals sit inside
+    // DOUBLE-quoted attributes, so an unescaped " ends the attribute: it broke
+    // every button and reopened the injection this function exists to close.
+    // &quot; is decoded back to " before the JS is compiled, which is exactly
+    // what the literal needs, while being inert to the attribute parser.
+    .replace(/"/g, '&quot;');
 }
 
 function epRow(e) {

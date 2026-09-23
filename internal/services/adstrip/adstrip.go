@@ -33,11 +33,16 @@ import (
 	"sort"
 )
 
-// MPEG-1 Layer III bitrates (kbit/s), indexed by the header's bitrate field.
-var bitrates = [16]int{0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0}
+// Layer III bitrates (kbit/s) by the header's bitrate field. MPEG-2 and 2.5
+// use a different table from MPEG-1 — podcast audio is very often MPEG-2 mono
+// at 22.05kHz, which a MPEG-1-only parser sees as zero frames.
+var bitratesV1 = [16]int{0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0}
+var bitratesV2 = [16]int{0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0}
 
-// Sampling rates, indexed by the header's sampling-rate field.
-var sampleRates = [4]int{44100, 48000, 32000, 0}
+// Sampling rates by version and the header's sampling-rate field.
+var sampleRatesV1 = [4]int{44100, 48000, 32000, 0} // MPEG-1
+var sampleRatesV2 = [4]int{22050, 24000, 16000, 0} // MPEG-2
+var sampleRatesV25 = [4]int{11025, 12000, 8000, 0} // MPEG-2.5
 
 // Frame is one MPEG audio frame: the raw bytes exactly as they must be written
 // back out, plus how long it plays for.
@@ -76,24 +81,39 @@ func ParseBytes(d []byte) []Frame {
 			i++
 			continue
 		}
-		version := (d[i+1] >> 3) & 3 // 3 == MPEG-1
+		version := (d[i+1] >> 3) & 3 // 3=MPEG-1, 2=MPEG-2, 0=MPEG-2.5 (1 reserved)
 		layer := (d[i+1] >> 1) & 3   // 1 == Layer III
 		brIdx := (d[i+2] >> 4) & 0xF
 		srIdx := (d[i+2] >> 2) & 3
 		padding := int((d[i+2] >> 1) & 1)
-		if version != 3 || layer != 1 || brIdx == 0 || brIdx == 15 || srIdx == 3 {
+		if layer != 1 || version == 1 || brIdx == 0 || brIdx == 15 || srIdx == 3 {
 			i++
 			continue
 		}
-		sr := sampleRates[srIdx]
-		length := (144*bitrates[brIdx]*1000)/sr + padding
+		// MPEG-1 carries 1152 samples per frame; MPEG-2 and 2.5 carry 576, and
+		// their frame length formula uses 72 rather than 144. Getting this wrong
+		// mis-measures every duration by 2x.
+		var sr, br, samples int
+		switch version {
+		case 3:
+			sr, br, samples = sampleRatesV1[srIdx], bitratesV1[brIdx], 1152
+		case 2:
+			sr, br, samples = sampleRatesV2[srIdx], bitratesV2[brIdx], 576
+		default:
+			sr, br, samples = sampleRatesV25[srIdx], bitratesV2[brIdx], 576
+		}
+		if sr == 0 || br == 0 {
+			i++
+			continue
+		}
+		length := (samples/8*br*1000)/sr + padding
 		if length < 24 || i+length > len(d) {
 			i++
 			continue
 		}
 		frames = append(frames, Frame{
 			Data:    d[i : i+length],
-			Seconds: 1152.0 / float64(sr),
+			Seconds: float64(samples) / float64(sr),
 		})
 		i += length
 	}
@@ -199,7 +219,11 @@ func commonRuns(a, b []uint64) []run {
 		}
 		start, startB := ai, bi
 		for start > 0 && startB > 0 && a[start-1] == b[startB-1] {
-			if n := len(runs); n > 0 && (start-1 < runs[n-1].aStart+runs[n-1].length) {
+			// Check BOTH sides: growing back over B frames the previous run
+			// already consumed would map two distinct A stretches onto the same
+			// B stretch, and the alignment would no longer be a valid matching.
+			if n := len(runs); n > 0 && (start-1 < runs[n-1].aStart+runs[n-1].length ||
+				startB-1 < runs[n-1].bStart+runs[n-1].length) {
 				break
 			}
 			start--

@@ -10,15 +10,18 @@ import (
 )
 
 type PodcastEpisode struct {
-	Id                 int32         `gorm:"autoIncrement;primary_key;not null"`
-	YoutubeVideoId     string        `json:"youtube_video_id" gorm:"index:youtubevideoid_type"`
-	EpisodeName        string        `json:"episode_name"`
-	EpisodeDescription string        `json:"episode_description"`
-	PublishedDate      time.Time     `json:"published_date"`
-	Type               string        `json:"type" gorm:"index:youtubevideoid_type_channelid_type"`
-	PodcastId          string        `json:"podcast_id" gorm:"foreignkey:PodcastId;association_foreignkey:Id"`
-	ImageUrl           string        `json:"image_url"`
-	Duration           time.Duration `json:"duration"`
+	Id                 int32     `gorm:"autoIncrement;primary_key;not null"`
+	YoutubeVideoId     string    `json:"youtube_video_id" gorm:"index:youtubevideoid_type"`
+	EpisodeName        string    `json:"episode_name"`
+	EpisodeDescription string    `json:"episode_description"`
+	PublishedDate      time.Time `json:"published_date" gorm:"index:idx_ep_podcast_published,priority:2"`
+	Type               string    `json:"type" gorm:"index:youtubevideoid_type_channelid_type"`
+	// `foreignkey` is not an index. Every hot path filters on podcast_id and
+	// orders by published_date (feed builds, the 30-minute poller, pruning), and
+	// without this each one scanned the whole episode table and re-sorted it.
+	PodcastId string        `json:"podcast_id" gorm:"foreignkey:PodcastId;association_foreignkey:Id;index:idx_ep_podcast_published,priority:1"`
+	ImageUrl  string        `json:"image_url"`
+	Duration  time.Duration `json:"duration"`
 	// RSS-sourced episodes: where the audio lives, and the feed's stable id.
 	// YoutubeVideoId doubles as the generic episode key for these (a synthetic
 	// "rss_<hash>"), so downloads, media URLs and playback history need no

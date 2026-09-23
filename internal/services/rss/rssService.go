@@ -1,13 +1,14 @@
 package rss
 
 import (
-	"encoding/xml"
 	"fmt"
 	"ikoyhn/podcast-sponsorblock/internal/config"
+	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/enum"
 	"ikoyhn/podcast-sponsorblock/internal/models"
 	"ikoyhn/podcast-sponsorblock/internal/services/generator"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -55,14 +56,36 @@ func GenerateRssFeed(podcast models.Podcast, host string, podcastType enum.Podca
 				Length: 0,
 				Type:   generator.M4A,
 			}
+			// length is a required RSS field and drives the download progress
+			// bar in Apple Podcasts and Overcast; it was always 0. Fill it in
+			// (and match the MIME type to the extension) whenever the file is
+			// already on disk.
+			if fp := database.FindFileWithId(config.AppConfig.Setup.AudioDir, podcastEpisode.YoutubeVideoId); fp != "" {
+				if st, err := os.Stat(fp); err == nil {
+					enclosure.Length = st.Size()
+				}
+				switch strings.ToLower(filepath.Ext(fp)) {
+				case ".mp3":
+					enclosure.Type = generator.MP3
+				case ".m4a", ".mp4":
+					enclosure.Type = generator.M4A
+				}
+			}
 
-			var builder strings.Builder
-			xml.EscapeText(&builder, []byte(podcastEpisode.EpisodeDescription))
-			escapedDescription := builder.String()
+			// NO pre-escaping here. Description is chardata on the Item struct,
+			// so encoding/xml escapes it when marshalling; escaping first meant
+			// every feed shipped doubly-escaped show notes and listeners saw
+			// literal "&#39;" and "&#xA;" instead of quotes and line breaks.
+			description := podcastEpisode.EpisodeDescription
+			if strings.TrimSpace(description) == "" {
+				// AddItem rejects an empty description, silently dropping the
+				// episode from the feed. Fall back to the title.
+				description = podcastEpisode.EpisodeName
+			}
 
 			podcastItem := generator.Item{
 				Title:       podcastEpisode.EpisodeName,
-				Description: escapedDescription,
+				Description: description,
 				IDuration:   fmt.Sprintf("%d", int(podcastEpisode.Duration.Seconds())),
 				GUID: struct {
 					Value       string `xml:",chardata"`
@@ -84,7 +107,10 @@ func GenerateRssFeed(podcast models.Podcast, host string, podcastType enum.Podca
 				}
 			}
 
-			ytPodcast.AddItem(podcastItem)
+			if _, err := ytPodcast.AddItem(podcastItem); err != nil {
+				log.Warnf("[RSS] Dropped episode %s from feed %s: %v",
+					podcastEpisode.YoutubeVideoId, podcast.DisplayName(), err)
+			}
 		}
 	}
 
