@@ -12,6 +12,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/services/common"
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
+	"ikoyhn/podcast-sponsorblock/internal/services/rssfeed"
 	"ikoyhn/podcast-sponsorblock/internal/services/youtube"
 	"io"
 	"net/http"
@@ -42,23 +43,27 @@ type dashboardEpisode struct {
 }
 
 type dashboardPodcast struct {
-	Id            string             `json:"id"`
-	Name          string             `json:"name"`
-	OriginalName  string             `json:"originalName"`
-	CustomName    string             `json:"customName"`
-	ArtistName    string             `json:"artistName"`
-	Description   string             `json:"description"`
-	ImageUrl      string             `json:"imageUrl"`
-	Type          string             `json:"type"`
-	FeedPath      string             `json:"feedPath"`
-	EpisodeCount  int64              `json:"episodeCount"`
-	AutoDownload  bool               `json:"autoDownload"`
-	Subscribed    bool               `json:"subscribed"`
-	LastFeedFetch int64              `json:"lastFeedFetch"`
-	ParentId      string             `json:"parentId"`
-	TitleFilter   string             `json:"titleFilter"`
-	ExcludeFilter string             `json:"excludeFilter"`
-	SbCategories  string             `json:"sbCategories"`
+	Id            string `json:"id"`
+	Name          string `json:"name"`
+	OriginalName  string `json:"originalName"`
+	CustomName    string `json:"customName"`
+	ArtistName    string `json:"artistName"`
+	Description   string `json:"description"`
+	ImageUrl      string `json:"imageUrl"`
+	Type          string `json:"type"`
+	FeedPath      string `json:"feedPath"`
+	EpisodeCount  int64  `json:"episodeCount"`
+	AutoDownload  bool   `json:"autoDownload"`
+	Subscribed    bool   `json:"subscribed"`
+	LastFeedFetch int64  `json:"lastFeedFetch"`
+	ParentId      string `json:"parentId"`
+	TitleFilter   string `json:"titleFilter"`
+	ExcludeFilter string `json:"excludeFilter"`
+	SbCategories  string `json:"sbCategories"`
+	// Where episodes come from ("youtube" or "rss") and the attached feed, so
+	// the dashboard can show and switch the per-podcast source preference.
+	Source        string             `json:"source"`
+	FeedUrl       string             `json:"feedUrl"`
 	ChannelId     string             `json:"channelId"`
 	ChannelTitle  string             `json:"channelTitle"`
 	ChannelThumb  string             `json:"channelThumb"`
@@ -174,6 +179,8 @@ func registerDashboardRoutes(e *echo.Echo) {
 				TitleFilter:   p.TitleFilter,
 				ExcludeFilter: p.ExcludeFilter,
 				SbCategories:  p.SponsorblockCategories,
+				Source:        p.Source(),
+				FeedUrl:       p.FeedUrl,
 				ChannelId:     p.ChannelId,
 				ChannelTitle:  p.ChannelTitle,
 				ChannelThumb:  p.ChannelThumb,
@@ -194,7 +201,29 @@ func registerDashboardRoutes(e *echo.Echo) {
 		if err := c.Bind(&req); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
 		}
-		id, podcastType, err := resolveInput(strings.TrimSpace(req.Input))
+		input := strings.TrimSpace(req.Input)
+
+		// Anything that isn't a YouTube identifier is tried as a podcast feed:
+		// a direct RSS url, an Apple Podcasts link, or a smart link like
+		// lnk.to. Those shows get their ads removed by comparing downloads
+		// instead of by SponsorBlock.
+		if !looksLikeYouTube(input) {
+			p, rerr := rssfeed.Ingest(input)
+			if rerr != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, rerr.Error())
+			}
+			events.Info("Podcast added from RSS: %s", p.PodcastName)
+			go artwork.Resolve(p.Id)
+			autodl.CheckPodcast(p.Id)
+			return c.JSON(http.StatusCreated, map[string]string{
+				"id":       p.Id,
+				"name":     p.PodcastName,
+				"type":     "RSS",
+				"feedPath": "/rss/" + p.Id,
+			})
+		}
+
+		id, podcastType, err := resolveInput(input)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
@@ -237,6 +266,11 @@ func registerDashboardRoutes(e *echo.Echo) {
 			AutoDownload *bool   `json:"autoDownload"`
 			Subscribed   *bool   `json:"subscribed"`
 			SbCategories *string `json:"sbCategories"`
+			// Per-podcast source preference. A show published in BOTH places
+			// can carry a YouTube id and a feed url at once; `source` picks
+			// which one episodes are pulled from, without re-adding the show.
+			FeedUrl *string `json:"feedUrl"`
+			Source  *string `json:"source"`
 		}
 		if err := c.Bind(&req); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
@@ -270,6 +304,47 @@ func registerDashboardRoutes(e *echo.Echo) {
 		if req.Subscribed != nil {
 			if err := database.SetSubscribed(id, *req.Subscribed); err != nil {
 				return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			}
+		}
+		if req.FeedUrl != nil {
+			raw := strings.TrimSpace(*req.FeedUrl)
+			if raw == "" {
+				p.FeedUrl = ""
+				// Nothing left to pull from: fall back to YouTube.
+				p.SourceType = "youtube"
+				database.UpdatePodcast(p)
+				events.Info("RSS feed detached from %s", p.DisplayName())
+			} else {
+				resolved, rerr := rssfeed.Resolve(raw)
+				if rerr != nil {
+					return echo.NewHTTPError(http.StatusBadRequest, rerr.Error())
+				}
+				p.FeedUrl = resolved
+				database.UpdatePodcast(p)
+				events.Info("RSS feed attached to %s: %s", p.DisplayName(), resolved)
+			}
+			p = database.GetPodcast(id)
+		}
+		if req.Source != nil {
+			want := strings.ToLower(strings.TrimSpace(*req.Source))
+			if want != "rss" && want != "youtube" {
+				return echo.NewHTTPError(http.StatusBadRequest, "source must be 'rss' or 'youtube'")
+			}
+			if want == "rss" && strings.TrimSpace(p.FeedUrl) == "" {
+				return echo.NewHTTPError(http.StatusBadRequest,
+					"this podcast has no RSS feed attached — send feedUrl first")
+			}
+			p.SourceType = want
+			database.UpdatePodcast(p)
+			events.Info("Episode source for %s set to %s", p.DisplayName(), want)
+			if want == "rss" {
+				go func(id string) {
+					if pp := database.GetPodcast(id); pp != nil {
+						if err := rssfeed.Refresh(pp); err != nil {
+							events.Error("Feed refresh failed for %s: %v", pp.DisplayName(), err)
+						}
+					}
+				}(id)
 			}
 		}
 		if req.SbCategories != nil {
@@ -762,6 +837,21 @@ func registerDashboardRoutes(e *echo.Echo) {
 
 // resolveInput turns a user-supplied string (URL, ID, or @handle) into a
 // podcast ID and type (PLAYLIST or CHANNEL)
+// looksLikeYouTube reports whether the input names a YouTube channel, playlist
+// or handle. Everything else is treated as a podcast feed.
+func looksLikeYouTube(input string) bool {
+	if strings.Contains(input, "youtube.com") || strings.Contains(input, "youtu.be") {
+		return true
+	}
+	if strings.HasPrefix(input, "@") {
+		return true
+	}
+	if strings.Contains(input, "://") || strings.Contains(input, ".") {
+		return false // some other URL or host — a feed
+	}
+	return channelIdRegex.MatchString(input) || playlistIdRegex.MatchString(input)
+}
+
 func resolveInput(input string) (string, string, error) {
 	if input == "" {
 		return "", "", echo.NewHTTPError(http.StatusBadRequest, "Input is empty")

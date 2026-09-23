@@ -103,6 +103,15 @@ func runDownload(youtubeVideoId string, forceRedownload bool, done chan struct{}
 	activeDownloads.Store(youtubeVideoId, time.Now())
 	defer activeDownloads.Delete(youtubeVideoId)
 
+	// RSS-sourced episodes are plain audio files from a podcast host, not
+	// YouTube videos: they are fetched over HTTP several times and de-added by
+	// comparing the copies. Branching here keeps every caller — the media
+	// route, the poller, the dashboard button — unchanged.
+	if ep := rssEpisodeFor(youtubeVideoId); ep != nil {
+		runRssDownload(ep)
+		return
+	}
+
 	title := youtubeVideoId
 	episode, err := database.GetEpisodeByVideoId(youtubeVideoId)
 	if err != nil {

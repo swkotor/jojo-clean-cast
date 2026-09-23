@@ -9,6 +9,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/services/downloader"
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
+	"ikoyhn/podcast-sponsorblock/internal/services/rssfeed"
 	"ikoyhn/podcast-sponsorblock/internal/services/sponsorblock"
 	"os"
 	"path/filepath"
@@ -532,6 +533,14 @@ func refreshPodcast(podcastId string) {
 			events.Error("Refresh failed for %s: %v", podcastId, r)
 		}
 	}()
+	// An RSS-sourced podcast is refreshed from its feed, not from the YouTube
+	// API. Source() defaults to youtube, so nothing else changes.
+	if p := database.GetPodcast(podcastId); p != nil && p.IsRss() {
+		if err := rssfeed.Refresh(p); err != nil {
+			events.Error("Feed refresh failed for %s: %v", p.DisplayName(), err)
+		}
+		return
+	}
 	podcastType := database.GetEpisodeType(podcastId)
 	if podcastType == "CHANNEL" {
 		channel.BuildChannelRssFeed(podcastId, &models.RssRequestParams{}, "http://localhost")

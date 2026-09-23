@@ -418,6 +418,7 @@ async function load() {
               <span class="ep-count">${p.episodeCount} episodes</span>
               <a class="yt-link" target="_blank" rel="noopener" href="${ytUrl}">▶ YouTube</a>
               <button class="chip ${p.sbCategories ? 'on' : ''}" title="SponsorBlock categories for this feed" onclick="openSbEditor(${jsq(p.id)})">SB: ${esc(p.sbCategories || sbDefault || 'sponsor')}</button>
+              <button class="chip ${p.source === 'rss' ? 'on' : ''}" title="Where episodes are pulled from. RSS strips ads by comparing two downloads of the same episode; YouTube uses SponsorBlock." onclick="openSource(${jsq(p.id)})">Source: ${p.source === 'rss' ? 'RSS' : 'YouTube'}</button>
               ${!isVirtual ? `<button class="chip" title="Create a filtered sub-feed from a recurring series in this feed" onclick="openSplit(${jsq(p.id)})">⑂ Split</button>` : ''}
               ${p.lastFeedFetch ? `<span class="ep-count" title="Last time a podcast app fetched this feed">· polled ${ago(p.lastFeedFetch)}</span>` : ''}
             </div>
@@ -806,6 +807,39 @@ const SB_STANDARD = [
   ['filler', 'Tangential filler / jokes'],
 ];
 let sbState = { id: null, selected: new Set(), custom: [] };
+
+async function openSource(id) {
+  const p = (window._pods || []).find(x => x.id === id);
+  if (!p) return;
+  const feed = prompt(
+    'RSS feed for this podcast.\n\n' +
+    'An Apple Podcasts link or a smart link (lnk.to) works too — it will be resolved.\n' +
+    'Leave blank to detach the feed and go back to YouTube.',
+    p.feedUrl || '');
+  if (feed === null) return;
+
+  let res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feedUrl: feed.trim() })
+  });
+  if (!res.ok) { alert('Could not attach that feed: ' + (await res.text())); return; }
+
+  if (feed.trim()) {
+    const useRss = confirm(
+      'Feed attached.\n\n' +
+      'Pull episodes from the RSS feed for this podcast?\n\n' +
+      'OK = RSS (ads removed by comparing two downloads)\n' +
+      'Cancel = keep using YouTube (ads removed by SponsorBlock)');
+    res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: useRss ? 'rss' : 'youtube' })
+    });
+    if (!res.ok) { alert('Could not switch source: ' + (await res.text())); return; }
+  }
+  loadAll();
+}
 
 function openSbEditor(id) {
   const p = (window._pods || []).find(x => x.id === id);

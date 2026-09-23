@@ -89,6 +89,14 @@ func Resolve(raw string) (string, error) {
 	if href := feedLinkFromHTML(string(body), finalURL); href != "" {
 		return href, nil
 	}
+	// Smart links (lnk.to, linktr.ee, pods.link and friends) are landing pages
+	// that do not redirect — they list the show on every platform. Pull an
+	// Apple Podcasts link out of the body and resolve that instead.
+	if apple := appleLinkInHTML(string(body)); apple != "" {
+		if feed, ok, err := appleFeed(apple); err == nil && ok {
+			return feed, nil
+		}
+	}
 	return "", fmt.Errorf("could not find a podcast feed at %s", raw)
 }
 
@@ -153,6 +161,18 @@ func feedLinkFromHTML(html, base string) string {
 		}
 	}
 	return ""
+}
+
+// appleIDInPageRe matches an Apple Podcasts show link anywhere in a document,
+// including the JSON-escaped "\/" form these pages embed in their state blob.
+var appleIDInPageRe = regexp.MustCompile(`podcasts\.apple\.com(?:\\?/[^"'<>\\ ]+)*?\\?/id(\d+)`)
+
+func appleLinkInHTML(html string) string {
+	m := appleIDInPageRe.FindStringSubmatch(html)
+	if m == nil {
+		return ""
+	}
+	return "https://podcasts.apple.com/podcast/id" + m[1]
 }
 
 func get(u string, limit int64) ([]byte, string, string, error) {
