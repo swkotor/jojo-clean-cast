@@ -20,21 +20,88 @@ import (
 	"github.com/lrstanley/go-ytdlp"
 )
 
-var youtubeVideoMutexes = &sync.Map{}
+// Per-video serialisation. Refcounted so the map does not grow forever: with a
+// bare sync.Map every video id ever requested (including bad ones hitting
+// /media) left a mutex behind for the life of the process.
+type videoLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+var (
+	lockMapMu  sync.Mutex
+	videoLocks = map[string]*videoLock{}
+	// Downloads currently running, owned BY THE DOWNLOADER. Callers used to
+	// track this themselves and clear it when they gave up waiting, which made
+	// an episode look idle while yt-dlp was still writing it - long enough for
+	// the cleanup passes to delete the file mid-write.
+	activeDownloads sync.Map
+)
+
+func acquireVideoLock(id string) *videoLock {
+	lockMapMu.Lock()
+	l := videoLocks[id]
+	if l == nil {
+		l = &videoLock{}
+		videoLocks[id] = l
+	}
+	l.refs++
+	lockMapMu.Unlock()
+	l.mu.Lock()
+	return l
+}
+
+func releaseVideoLock(id string, l *videoLock) {
+	l.mu.Unlock()
+	lockMapMu.Lock()
+	l.refs--
+	if l.refs == 0 {
+		delete(videoLocks, id)
+	}
+	lockMapMu.Unlock()
+}
+
+// IsActive reports whether a download for this video is running right now.
+func IsActive(youtubeVideoId string) bool {
+	_, ok := activeDownloads.Load(youtubeVideoId)
+	return ok
+}
+
+// downloadTimeout bounds a single yt-dlp run. Without it a wedged child process
+// held the per-video lock forever, and because callers blocked acquiring that
+// lock their own watchdogs never started - one stuck download froze the whole
+// auto-download poller until the container was restarted.
+const downloadTimeout = 2 * time.Hour
 
 const youtubeVideoUrl = "https://www.youtube.com/watch?v="
 
+// GetYoutubeVideo starts a download and returns a channel closed when it
+// finishes. It returns IMMEDIATELY: the per-video lock is taken inside the
+// goroutine, so a caller's select/timeout is armed before any waiting begins.
+// Taking the lock in the caller's goroutine meant a caller could block for
+// hours before its own watchdog was even running.
 func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{} {
-	mutex, _ := youtubeVideoMutexes.LoadOrStore(youtubeVideoId, &sync.Mutex{})
+	done := make(chan struct{})
+	go runDownload(youtubeVideoId, forceRedownload, done)
+	return done
+}
 
-	mutex.(*sync.Mutex).Lock()
+func runDownload(youtubeVideoId string, forceRedownload bool, done chan struct{}) {
+	defer close(done)
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Errorf("Panic while downloading %s: %v", youtubeVideoId, rec)
+		}
+	}()
+
+	lock := acquireVideoLock(youtubeVideoId)
+	defer releaseVideoLock(youtubeVideoId, lock)
 
 	if !forceRedownload && database.FileExistsWithId(config.AppConfig.Setup.AudioDir, youtubeVideoId) {
-		mutex.(*sync.Mutex).Unlock()
-		alreadyDownloaded := make(chan struct{})
-		close(alreadyDownloaded)
-		return alreadyDownloaded
+		return
 	}
+	activeDownloads.Store(youtubeVideoId, time.Now())
+	defer activeDownloads.Delete(youtubeVideoId)
 
 	title := youtubeVideoId
 	episode, err := database.GetEpisodeByVideoId(youtubeVideoId)
@@ -111,17 +178,10 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 		dl.ExtractorArgs(config.AppConfig.Ytdlp.YtdlpExtractorArgs)
 	}
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		defer mutex.(*sync.Mutex).Unlock()
-		defer func() {
-			if rec := recover(); rec != nil {
-				log.Errorf("Panic while downloading %s: %v", youtubeVideoId, rec)
-			}
-		}()
-
-		r, dlErr := dl.Run(context.TODO(), youtubeVideoUrl+youtubeVideoId)
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+	r, dlErr := dl.Run(ctx, youtubeVideoUrl+youtubeVideoId)
+	{
 
 		if r == nil {
 			promoteStagedFile(stagingDir, downloadDir, youtubeVideoId)
@@ -164,9 +224,7 @@ func GetYoutubeVideo(youtubeVideoId string, forceRedownload bool) <-chan struct{
 			log.Infof("%s download completed successfully.", title)
 			ntfy.SendNotification(fmt.Sprintf("%s download success!", title), "Clean Cast - Success")
 		}
-	}()
-
-	return done
+	}
 }
 
 func ytdlpProgress(etaNotified *uint32, prog ytdlp.ProgressUpdate, title string) {

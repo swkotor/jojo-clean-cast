@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/subtle"
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/models"
@@ -16,9 +17,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	log "github.com/labstack/gommon/log"
 	"github.com/robfig/cron"
 )
@@ -78,7 +81,10 @@ func registerRoutes(e *echo.Echo) {
 		if strings.Contains(youtubeVideoId, "/") || strings.Contains(youtubeVideoId, "\\") || strings.Contains(youtubeVideoId, "..") {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file name")
 		}
-		if !common.IsValidParam(youtubeVideoId) {
+		// IsValidID, not IsValidParam: this value becomes a yt-dlp output
+		// template and is appended to a YouTube URL, so '%', '&' and '?' must
+		// not survive - IsValidParam only rejects slashes and "..".
+		if !common.IsValidID(youtubeVideoId) {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid video id")
 		}
 
@@ -103,7 +109,17 @@ func registerRoutes(e *echo.Echo) {
 			if file != nil {
 				file.Close()
 			}
-			<-downloader.GetYoutubeVideo(youtubeVideoId, false)
+			// Bounded, and cancellable by the client. An unbounded receive
+			// here meant a wedged yt-dlp hung the request forever, and every
+			// retry from the podcast client piled up another stuck handler.
+			select {
+			case <-downloader.GetYoutubeVideo(youtubeVideoId, false):
+			case <-c.Request().Context().Done():
+				return echo.NewHTTPError(http.StatusRequestTimeout, "Client went away")
+			case <-time.After(30 * time.Minute):
+				log.Errorf("[MEDIA] Timed out waiting for %s", youtubeVideoId)
+				return echo.NewHTTPError(http.StatusGatewayTimeout, "Episode still downloading, try again shortly")
+			}
 			filePath = database.FindFileWithId(audioDirAbs, youtubeVideoId)
 			file, err = os.Open(filePath)
 			if err != nil || file == nil {
@@ -154,8 +170,13 @@ func registerRoutes(e *echo.Echo) {
 func validateQueryParams(c echo.Context) (*models.RssRequestParams, error) {
 	limitVar := c.Request().URL.Query().Get("limit")
 	dateVar := c.Request().URL.Query().Get("date")
-	if !common.IsValidParam(c.Param("channelId")) {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid channel id")
+	// Validate whichever id THIS route actually carries. This used to read
+	// c.Param("channelId") unconditionally, so on /rss/:youtubePlaylistId it
+	// checked an empty string and the real id went through unvalidated.
+	for _, name := range []string{"channelId", "youtubePlaylistId"} {
+		if v := c.Param(name); v != "" && !common.IsValidParam(v) {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid id")
+		}
 	}
 	if limitVar != "" && dateVar != "" {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid parameters")
@@ -163,8 +184,11 @@ func validateQueryParams(c echo.Context) (*models.RssRequestParams, error) {
 
 	if limitVar != "" {
 		limitInt, err := strconv.Atoi(limitVar)
-		if err != nil {
+		if err != nil || limitInt < 1 {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid limit")
+		}
+		if limitInt > 1000 {
+			limitInt = 1000
 		}
 		return &models.RssRequestParams{Limit: &limitInt, Date: nil}, nil
 	}
@@ -213,8 +237,34 @@ func setupHandlers(e *echo.Echo) {
 	if value, ok := os.LookupEnv("TRUSTED_HOSTS"); ok && value != "" {
 		e.Use(hostMiddleware)
 	}
+
+	// Reject oversized bodies on Content-Length, before anything is read.
+	// Cover upload checked the size only AFTER c.FormFile had already spooled
+	// the whole multipart body to memory and disk.
+	e.Use(middleware.BodyLimit("12M"))
+
+	// LAN clients authenticate by source IP alone, so a browser on the LAN
+	// carries that authority implicitly and any website it visits could post to
+	// the dashboard. Multipart and plain forms are CORS-"simple" and trigger no
+	// preflight, so cover upload and episode download were reachable that way.
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			switch c.Request().Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				return next(c)
+			}
+			if site := c.Request().Header.Get("Sec-Fetch-Site"); site == "cross-site" {
+				return echo.NewHTTPError(http.StatusForbidden, "Cross-site request refused")
+			}
+			return next(c)
+		}
+	})
 }
 
+// handler builds the absolute base URL used for media and artwork links in a
+// generated feed. When PUBLIC_URL is configured it wins for non-local requests:
+// otherwise the URLs come from a client-supplied Host header, so a forged Host
+// yields a feed whose enclosures point somewhere else entirely.
 func handler(r *http.Request) string {
 	var scheme string
 	// Honour the proxy's scheme (Cloudflare terminates TLS for us) so that
@@ -226,9 +276,12 @@ func handler(r *http.Request) string {
 	} else {
 		scheme = "http"
 	}
-	host := r.Host
-	url := scheme + "://" + host
-	return url
+	if pub := strings.TrimRight(os.Getenv("PUBLIC_URL"), "/"); pub != "" {
+		if r.Header.Get("Cf-Connecting-Ip") != "" || r.Header.Get("X-Forwarded-For") != "" {
+			return pub
+		}
+	}
+	return scheme + "://" + r.Host
 }
 
 // isLocalRequest reports whether a request came directly from the local
@@ -245,7 +298,66 @@ func isLocalRequest(c echo.Context) bool {
 		host = r.RemoteAddr
 	}
 	ip := net.ParseIP(host)
-	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() {
+		return true
+	}
+	// LAN_CIDRS narrows which addresses skip authentication. Without it any
+	// RFC1918 address counts, which includes every other container on the same
+	// docker bridge - several of those are themselves internet-exposed, and
+	// they could read the tunnel token straight out of /api/config.
+	if nets := lanNets(); len(nets) > 0 {
+		for _, n := range nets {
+			if n.Contains(ip) {
+				return true
+			}
+		}
+		return false
+	}
+	return ip.IsPrivate()
+}
+
+var (
+	lanNetsOnce sync.Once
+	lanNetsVal  []*net.IPNet
+)
+
+func lanNets() []*net.IPNet {
+	lanNetsOnce.Do(func() {
+		for _, c := range strings.Split(os.Getenv("LAN_CIDRS"), ",") {
+			if c = strings.TrimSpace(c); c == "" {
+				continue
+			}
+			if _, n, err := net.ParseCIDR(c); err == nil {
+				lanNetsVal = append(lanNetsVal, n)
+			} else {
+				log.Warnf("[AUTH] Ignoring invalid LAN_CIDRS entry %q: %v", c, err)
+			}
+		}
+	})
+	return lanNetsVal
+}
+
+// requestToken accepts the token either as ?token= (what podcast clients can
+// send) or as an Authorization: Bearer header, which keeps the secret out of
+// proxy logs and Referer headers for anything that can set a header.
+func requestToken(c echo.Context) string {
+	if h := c.Request().Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+	}
+	return c.Request().URL.Query().Get("token")
+}
+
+// tokenMatches compares in constant time so a wrong token cannot be narrowed
+// down by timing.
+func tokenMatches(given string) bool {
+	want := config.AppConfig.Authentication.Token
+	if want == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(given), []byte(want)) == 1
 }
 
 func checkAuthentication(c echo.Context) error {
@@ -265,14 +377,14 @@ func checkAuthentication(c echo.Context) error {
 	// If both basic and token are configured, accept either method (Basic OR token)
 	if basicConfigured && tokenConfigured {
 		user, pass, ok := c.Request().BasicAuth()
-		token := c.Request().URL.Query().Get("token")
+		token := requestToken(c)
 
 		basicOk := ok && pass == config.AppConfig.Authentication.BasicAuth.Password
 		if config.AppConfig.Authentication.BasicAuth.Username != "" {
 			basicOk = basicOk && user == config.AppConfig.Authentication.BasicAuth.Username
 		}
 
-		tokenOk := token == config.AppConfig.Authentication.Token
+		tokenOk := tokenMatches(token)
 
 		if basicOk || tokenOk {
 			return nil
@@ -290,8 +402,7 @@ func checkAuthentication(c echo.Context) error {
 	}
 
 	if tokenConfigured {
-		token := c.Request().URL.Query().Get("token")
-		if token == config.AppConfig.Authentication.Token {
+		if tokenMatches(requestToken(c)) {
 			return nil
 		}
 		return echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")

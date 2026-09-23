@@ -41,6 +41,13 @@ const recentCount = 5
 
 // IsDownloading reports whether a download for the video is in progress
 func IsDownloading(videoId string) bool {
+	// Ask the downloader too. Our own marker is cleared when we STOP WAITING,
+	// which is not the same as the download stopping - on the watchdog path the
+	// file is still being written, and treating it as idle let the cleanup
+	// passes delete it mid-write.
+	if downloader.IsActive(videoId) {
+		return true
+	}
 	_, ok := inProgress.Load(videoId)
 	return ok
 }
@@ -78,9 +85,16 @@ func inBackoff(videoId string) bool {
 // Download runs a download for one episode, tracking progress and logging events.
 // Returns immediately if the file already exists or a download is in progress.
 func Download(videoId, episodeName string) {
-	if IsDownloading(videoId) {
+	if downloader.IsActive(videoId) {
 		return
 	}
+	// LoadOrStore, not Load-then-Store: the dashboard starts this in a
+	// goroutine per button press, so two quick clicks (or a click racing the
+	// poller) could both pass a plain check and both run.
+	if _, loaded := inProgress.LoadOrStore(videoId, time.Now()); loaded {
+		return
+	}
+	defer inProgress.Delete(videoId)
 	audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
 	if database.FileExistsWithId(audioDirAbs, videoId) {
 		return
@@ -89,16 +103,16 @@ func Download(videoId, episodeName string) {
 	if name == "" {
 		name = videoId
 	}
-	inProgress.Store(videoId, time.Now())
-	defer inProgress.Delete(videoId)
-
 	events.Info("Download started: %s", name)
 	done := downloader.GetYoutubeVideo(videoId, false)
 	select {
 	case <-done:
-	case <-time.After(2 * time.Hour):
+	case <-time.After(2*time.Hour + time.Minute):
+		// The downloader has its own, shorter deadline; if we get here it is
+		// already unwinding. Leave the claim to downloader.IsActive rather than
+		// declaring the episode idle.
 		recordFailure(videoId)
-		events.Error("Download timed out after 2h: %s", name)
+		events.Error("Download timed out: %s", name)
 		return
 	}
 	if database.FileExistsWithId(audioDirAbs, videoId) {
@@ -119,7 +133,14 @@ func NoteFailure(videoId string) {
 	recordFailure(videoId)
 }
 
+// failMu guards the read-modify-write below. sync.Map has no atomic update, so
+// concurrent failures for the same video silently lost increments and the
+// backoff never grew past its first step.
+var failMu sync.Mutex
+
 func recordFailure(videoId string) {
+	failMu.Lock()
+	defer failMu.Unlock()
 	f := failInfo{Count: 1, Last: time.Now()}
 	if v, ok := failures.Load(videoId); ok {
 		f.Count = v.(failInfo).Count + 1
@@ -267,6 +288,10 @@ func refreshChangedCuts() {
 		events.Info("SponsorBlock segments changed, re-cutting %s (%.0fs -> %.0fs)",
 			h.YoutubeVideoId, h.TotalTimeSkipped, current)
 		inProgress.Store(h.YoutubeVideoId, time.Now())
+		// defer inside the loop body via a func: a panic between here and the
+		// Delete below used to leave the entry in place for the life of the
+		// process, permanently marking the episode as downloading.
+		defer inProgress.Delete(h.YoutubeVideoId)
 		select {
 		case <-downloader.GetYoutubeVideo(h.YoutubeVideoId, true):
 		case <-time.After(2 * time.Hour):
