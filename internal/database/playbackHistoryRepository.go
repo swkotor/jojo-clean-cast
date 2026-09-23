@@ -50,6 +50,8 @@ func SetSkipBaseline(youtubeVideoId string, totalTimeSkipped float64) {
 			"total_time_skipped": totalTimeSkipped,
 		}).
 		FirstOrCreate(&history)
+	// Deliberately does NOT touch `served`. This runs after a DOWNLOAD, and an
+	// episode no device has fetched must never become eligible for cleanup.
 }
 
 // TouchEpisodeAccess refreshes only the last-access time. Serving an episode
@@ -59,7 +61,11 @@ func SetSkipBaseline(youtubeVideoId string, totalTimeSkipped float64) {
 func TouchEpisodeAccess(youtubeVideoId string) {
 	var history models.EpisodePlaybackHistory
 	db.Where(models.EpisodePlaybackHistory{YoutubeVideoId: youtubeVideoId}).
-		Assign(map[string]interface{}{"last_access_date": time.Now().Unix()}).
+		Assign(map[string]interface{}{
+			"last_access_date": time.Now().Unix(),
+			// The ONLY place `served` is set: a device asked for the audio.
+			"served": true,
+		}).
 		FirstOrCreate(&history)
 }
 

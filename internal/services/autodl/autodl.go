@@ -212,6 +212,10 @@ func recentEpisodesFor(p *models.Podcast) []models.PodcastEpisode {
 	}
 	if err != nil {
 		events.Error("Could not read episodes for %s: %v", p.DisplayName(), err)
+		// Return nil, not a partial list: callers delete everything NOT in the
+		// keep set, so one transient SQLite error would wipe a podcast's whole
+		// back catalogue.
+		return nil
 	}
 	return eps
 }
@@ -366,8 +370,8 @@ func cleanupServed(keep map[string]bool) {
 			continue
 		}
 		h := database.GetPlaybackHistory(videoId)
-		if h == nil {
-			continue // never served to a device yet
+		if h == nil || !h.Served {
+			continue // never fetched by a device yet — keep it ready to play
 		}
 		if time.Since(time.Unix(h.LastAccessDate, 0)) < window {
 			continue
@@ -434,7 +438,22 @@ func enforceStorageCap() {
 	var total int64
 	audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
 	filepath.WalkDir(audioDirAbs, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			// Never descend into staging: those files belong to a download still
+			// running, and removing one leaves yt-dlp writing to a deleted inode
+			// and the promote step finding nothing.
+			if d.Name() == ".incoming" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Only episodes count towards the cap, and only episodes are freed to
+		// meet it. metadata.json and cover.jpg are tiny and are what keeps a
+		// podcast describable — they were deleted first simply for being oldest.
+		if !database.IsAudioFileName(d.Name()) {
 			return nil
 		}
 		if info, err := d.Info(); err == nil {
@@ -450,6 +469,9 @@ func enforceStorageCap() {
 	for _, f := range files {
 		if total <= capBytes {
 			break
+		}
+		if IsDownloading(strings.TrimSuffix(filepath.Base(f.path), filepath.Ext(f.path))) {
+			continue
 		}
 		if err := os.Remove(f.path); err == nil {
 			total -= f.size
@@ -506,8 +528,11 @@ func downloadEpisodes(episodes []models.PodcastEpisode) {
 		if inBackoff(ep.YoutubeVideoId) {
 			continue
 		}
-		// already served to a device before (file was cleaned up) — don't re-download
-		if database.GetPlaybackHistory(ep.YoutubeVideoId) != nil {
+		// Already fetched by a device and since cleaned up — don't re-download.
+		// Gated on `served`, not on the row existing: the row is also created to
+		// record what SponsorBlock cut, and reading that as "served" stopped
+		// every episode from ever being pre-downloaded again.
+		if h := database.GetPlaybackHistory(ep.YoutubeVideoId); h != nil && h.Served {
 			continue
 		}
 		// sequential to avoid hammering YouTube

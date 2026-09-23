@@ -179,7 +179,10 @@ func FileExistsWithId(baseDir, videoId string) bool {
 // podcast folder's metadata.json and cover.jpg were tracked as if they were
 // episodes, creating junk playback-history rows (and pointless SponsorBlock
 // lookups for a "video" called "cover").
-func isAudioFile(name string) bool {
+// IsAudioFileName reports whether a filename is an episode rather than a
+// sidecar (cover art, metadata). Shared so cleanup passes never treat a
+// podcast's artwork as something to delete for space.
+func IsAudioFileName(name string) bool {
 	switch strings.ToLower(path.Ext(name)) {
 	case ".m4a", ".mp3", ".opus", ".ogg", ".aac", ".webm", ".mp4", ".flac", ".wav":
 		return true
@@ -195,7 +198,7 @@ func ListAudioFileNames(baseDir string) []string {
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			if isAudioFile(entry.Name()) {
+			if IsAudioFileName(entry.Name()) {
 				names = append(names, entry.Name())
 			}
 			continue
@@ -205,7 +208,7 @@ func ListAudioFileNames(baseDir string) []string {
 			continue
 		}
 		for _, sub := range subEntries {
-			if !sub.IsDir() && isAudioFile(sub.Name()) {
+			if !sub.IsDir() && IsAudioFileName(sub.Name()) {
 				names = append(names, sub.Name())
 			}
 		}

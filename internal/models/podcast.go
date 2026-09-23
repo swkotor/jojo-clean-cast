@@ -19,6 +19,12 @@ type PodcastEpisode struct {
 	PodcastId          string        `json:"podcast_id" gorm:"foreignkey:PodcastId;association_foreignkey:Id"`
 	ImageUrl           string        `json:"image_url"`
 	Duration           time.Duration `json:"duration"`
+	// RSS-sourced episodes: where the audio lives, and the feed's stable id.
+	// YoutubeVideoId doubles as the generic episode key for these (a synthetic
+	// "rss_<hash>"), so downloads, media URLs and playback history need no
+	// special-casing.
+	EnclosureUrl string `json:"enclosure_url"`
+	Guid         string `json:"guid" gorm:"index"`
 }
 
 type Podcast struct {
@@ -37,9 +43,9 @@ type Podcast struct {
 	AutoDownloadOff bool             `json:"auto_download_off"`
 	CustomImage     string           `json:"custom_image"`
 	// Locally cached YouTube artwork (filename in <config>/art)
-	AutoImage string `json:"auto_image"`
-	Subscribed      bool             `json:"subscribed"`
-	LastFeedFetch   int64            `json:"last_feed_fetch"`
+	AutoImage     string `json:"auto_image"`
+	Subscribed    bool   `json:"subscribed"`
+	LastFeedFetch int64  `json:"last_feed_fetch"`
 	// Filtered sub-feed support: a "virtual" podcast that republishes a
 	// title-filtered subset of its parent's episodes
 	ParentId    string `json:"parent_id"`
@@ -54,7 +60,26 @@ type Podcast struct {
 	ChannelTitle  string `json:"channel_title"`
 	ChannelThumb  string `json:"channel_thumb"`
 	ChannelBanner string `json:"channel_banner"`
+	// Where episodes are pulled from: "youtube" (default) or "rss". A podcast
+	// may carry BOTH a YouTube id and a feed url — this picks which one is
+	// used, so a show published in both places can be switched over without
+	// being re-added.
+	SourceType string `json:"source_type"`
+	FeedUrl    string `json:"feed_url"`
 }
+
+// Source reports the effective episode source, defaulting to YouTube. An "rss"
+// preference without a feed url falls back rather than leaving the podcast
+// unable to fetch anything.
+func (p *Podcast) Source() string {
+	if p.SourceType == "rss" && strings.TrimSpace(p.FeedUrl) != "" {
+		return "rss"
+	}
+	return "youtube"
+}
+
+// IsRss is shorthand for Source() == "rss".
+func (p *Podcast) IsRss() bool { return p.Source() == "rss" }
 
 // IsVirtual reports whether this podcast is a filtered sub-feed
 func (p *Podcast) IsVirtual() bool {
@@ -84,9 +109,17 @@ func (p *Podcast) DisplayName() string {
 }
 
 type EpisodePlaybackHistory struct {
-	YoutubeVideoId   string  `json:"youtube_video_id" gorm:"primary_key"`
-	LastAccessDate   int64   `json:"last_access_date"`
+	YoutubeVideoId string `json:"youtube_video_id" gorm:"primary_key"`
+	LastAccessDate int64  `json:"last_access_date"`
+	// How much SponsorBlock removed from the file currently on disk. Written
+	// when the file is downloaded; it says nothing about the user.
 	TotalTimeSkipped float64 `json:"total_time_skipped"`
+	// Whether a device has actually FETCHED this episode. Only /media sets it.
+	// The distinction matters: "delete once the listener has it" and "we know
+	// what was cut from this file" are different facts, and conflating them
+	// meant every downloaded episode was treated as already-listened-to and
+	// deleted hours later, un-downloaded.
+	Served bool `json:"served"`
 }
 
 func NewPodcastEpisode(youtubeVideo *youtube.Video, duration time.Duration, podcastType enum.PodcastType, podcastId string) PodcastEpisode {

@@ -189,7 +189,6 @@ func ytdlpProgress(etaNotified *uint32, prog ytdlp.ProgressUpdate, title string)
 	}
 }
 
-
 // promoteStagedFile atomically moves a finished download from the staging
 // directory into the podcast's folder, replacing any previous version.
 func promoteStagedFile(stagingDir, downloadDir, youtubeVideoId string) error {
