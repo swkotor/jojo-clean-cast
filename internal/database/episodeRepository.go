@@ -78,20 +78,29 @@ func IsEpisodeSaved(item *ytApi.Video) bool {
 
 func GetPodcastEpisodesByPodcastId(podcastId string, podcastType enum.PodcastType) ([]models.PodcastEpisode, error) {
 	var episodes []models.PodcastEpisode
-	if podcastType == enum.PLAYLIST {
-		err := db.Where("podcast_id = ?", podcastId).
+
+	// A podcast can hold episodes from BOTH sources: it may have been added
+	// from YouTube and later had a feed attached (or the reverse). Publishing
+	// all of them would list every episode twice in the subscriber's app, so the
+	// feed only ever contains episodes from the source currently selected.
+	sourceFilter := "type != ?"
+	sourceArg := interface{}("RSS")
+	if p := GetPodcast(podcastId); p != nil && p.IsRss() {
+		sourceFilter = "type = ?"
+	}
+
+	switch podcastType {
+	case enum.PLAYLIST:
+		if err := db.Where("podcast_id = ? AND "+sourceFilter, podcastId, sourceArg).
 			Order("published_date DESC").
-			Find(&episodes).Error
-		if err != nil {
+			Find(&episodes).Error; err != nil {
 			return nil, err
 		}
-	} else if podcastType == enum.CHANNEL {
+	case enum.CHANNEL:
 		dur := config.AppConfig.Ytdlp.EpisodeDurationMinimum
-
-		err := db.Where("podcast_id = ? AND duration >= ?", podcastId, dur).
+		if err := db.Where("podcast_id = ? AND duration >= ? AND "+sourceFilter, podcastId, dur, sourceArg).
 			Order("published_date DESC").
-			Find(&episodes).Error
-		if err != nil {
+			Find(&episodes).Error; err != nil {
 			return nil, err
 		}
 	}
