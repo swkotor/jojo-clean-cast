@@ -158,7 +158,14 @@ func registerRoutes(e *echo.Echo) {
 		// client is still fetching it — with If-Range the client restarts
 		// cleanly instead of splicing bytes from two different versions, which
 		// is heard as audio jumping to another part of the show.
-		c.Response().Header().Set("Content-Type", "audio/mp4")
+		// The type MUST match the actual file. This was hardcoded to audio/mp4,
+		// which is right for yt-dlp's .m4a but wrong for the .mp3 that RSS
+		// sources produce — and it contradicted the audio/mpeg the feed
+		// advertises for the same episode. Apple Podcasts refuses a file whose
+		// Content-Type disagrees with the enclosure ("this episode can't be
+		// played on this device"); setting it here also stops ServeFile
+		// deriving it, so it has to be correct.
+		c.Response().Header().Set("Content-Type", audioContentType(filePath))
 		c.Response().Header().Set("Accept-Ranges", "bytes")
 		http.ServeFile(c.Response().Writer, c.Request(), filePath)
 		return nil
@@ -353,6 +360,32 @@ func lanNets() []*net.IPNet {
 // requestToken accepts the token either as ?token= (what podcast clients can
 // send) or as an Authorization: Bearer header, which keeps the secret out of
 // proxy logs and Referer headers for anything that can set a header.
+// audioContentType maps a downloaded episode's extension to its MIME type.
+// Anything unknown falls back to the yt-dlp default rather than a generic
+// octet-stream, which podcast clients will not play at all.
+func audioContentType(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".mp3":
+		return "audio/mpeg"
+	case ".m4a", ".mp4", ".m4b":
+		return "audio/mp4"
+	case ".opus":
+		return "audio/opus"
+	case ".ogg", ".oga":
+		return "audio/ogg"
+	case ".webm":
+		return "audio/webm"
+	case ".aac":
+		return "audio/aac"
+	case ".flac":
+		return "audio/flac"
+	case ".wav":
+		return "audio/wav"
+	default:
+		return "audio/mp4"
+	}
+}
+
 func requestToken(c echo.Context) string {
 	if h := c.Request().Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
