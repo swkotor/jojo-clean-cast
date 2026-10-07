@@ -21,16 +21,20 @@ import (
 
 // Downloading an RSS episode more than once is the whole trick: hosts stitch
 // ads in per request, so the copies differ only in the ads and intersecting
-// them leaves the show. Two is the minimum that can detect anything; more
-// reduces the chance an ad slot gets the same filler every time, at the cost of
-// another full download.
+// them leaves the show.
+//
+// THREE, not two. Two is the minimum that can detect anything, but a host fills
+// several ad slots per episode and any slot that happens to receive the same
+// filler in both copies survives. Measured on Giant Bombcast 961: two copies
+// found one slot (87s) and left a ~28s pre-roll in place, while three found
+// three slots (145s) and removed it. The cost is one more full download.
 func variantCount() int {
 	if v := os.Getenv("AD_STRIP_VARIANTS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 4 {
 			return n
 		}
 	}
-	return 2
+	return 3
 }
 
 // Each fetch presents a different client identity. The stitcher keys its ad
