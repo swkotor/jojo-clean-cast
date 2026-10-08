@@ -1,6 +1,7 @@
 package database
 
 import (
+	log "github.com/labstack/gommon/log"
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/models"
 	"os"
@@ -35,6 +36,18 @@ func SetupDatabase() {
 	})
 	if err != nil {
 		panic(err)
+	}
+
+	// WAL lets the 30-minute writer and a multi-second feed read proceed at
+	// once. With the default rollback journal they serialise, which is how a
+	// growing library starts returning "database is locked" under a feed
+	// refresh. busy_timeout turns any remaining contention into a short wait
+	// instead of an immediate error.
+	if err := db.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
+		log.Warn("[DB] Could not enable WAL: " + err.Error())
+	}
+	if err := db.Exec("PRAGMA busy_timeout=5000").Error; err != nil {
+		log.Warn("[DB] Could not set busy_timeout: " + err.Error())
 	}
 
 	err = db.AutoMigrate(&models.EpisodePlaybackHistory{})

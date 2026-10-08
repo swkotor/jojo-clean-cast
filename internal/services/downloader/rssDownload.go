@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"ikoyhn/podcast-sponsorblock/internal/config"
@@ -66,21 +69,28 @@ func downloadRssEpisode(ep *models.PodcastEpisode, stagingDir string) error {
 
 	for i := 0; i < n; i++ {
 		p := filepath.Join(stagingDir, fmt.Sprintf("%s.v%d.part", ep.YoutubeVideoId, i))
+		// Register the path BEFORE fetching. fetchTo creates the file
+		// immediately and may have written most of a 170MB body before
+		// failing; tracking it only on success left that partial behind
+		// forever when the FIRST variant failed (nothing downstream sweeps
+		// staging on that path).
+		paths = append(paths, p)
 		if err := fetchTo(ep.EnclosureUrl, p, variantAgents[i%len(variantAgents)]); err != nil {
 			if i == 0 {
 				return fmt.Errorf("download failed: %w", err)
 			}
 			// A later variant failing is not fatal; carry on with what we have.
 			log.Warnf("[RSS] variant %d failed for %s: %v", i, ep.YoutubeVideoId, err)
+			paths = paths[:len(paths)-1]
+			os.Remove(p)
 			break
 		}
-		paths = append(paths, p)
 	}
 	if len(paths) == 0 {
 		return fmt.Errorf("no download succeeded")
 	}
 
-	out := filepath.Join(stagingDir, ep.YoutubeVideoId+".mp3")
+	out := filepath.Join(stagingDir, ep.YoutubeVideoId+enclosureExt(ep))
 
 	if len(paths) < 2 {
 		return os.Rename(paths[0], out)
@@ -89,8 +99,15 @@ func downloadRssEpisode(ep *models.PodcastEpisode, stagingDir string) error {
 	variants := make([][]adstrip.Frame, 0, len(paths))
 	for _, p := range paths {
 		f, err := adstrip.Parse(p)
-		if err != nil || len(f) == 0 {
-			log.Warnf("[RSS] %s: could not parse %s as MP3 — keeping the download as-is", ep.YoutubeVideoId, filepath.Base(p))
+		// A non-MP3 enclosure (.m4a and .aac are common) still yields
+		// thousands of false "frames", because any 0xFFEx byte pair looks like
+		// a sync word. len(f) > 0 is therefore NOT enough: without a coverage
+		// check the intersection of two AAC files produced a ~900KB file of
+		// unrelated fragments, published as a 76-second episode of noise while
+		// the real two-hour show was discarded.
+		if err != nil || !framesCoverFile(p, f) {
+			log.Warnf("[RSS] %s: %s is not usable MPEG audio — keeping the download as-is",
+				ep.YoutubeVideoId, filepath.Base(p))
 			return os.Rename(paths[0], out)
 		}
 		variants = append(variants, f)
@@ -111,6 +128,26 @@ func downloadRssEpisode(ep *models.PodcastEpisode, stagingDir string) error {
 		events.Error("Ad removal rejected for %s: downloads shared only %.0f%%", ep.EpisodeName, res.SharedPct)
 		return os.Rename(paths[0], out)
 	}
+	// SharedPct is a ratio of the BASE file, so it cannot see a variant that is
+	// simply shorter (a host re-encode, or a feed that swapped the file
+	// mid-download). Those align over a prefix and the rest is silently
+	// dropped — published as a successful strip with 40 minutes missing. Check
+	// the result against what the feed says the episode should be, and against
+	// how much any real ad load could plausibly be.
+	if want := ep.Duration.Seconds(); want > 0 && res.Clean < 0.85*want {
+		log.Warnf("[RSS] %s: result %.0fs is far short of the advertised %.0fs — keeping the original",
+			ep.YoutubeVideoId, res.Clean, want)
+		events.Error("Ad removal rejected for %s: result was %.0fs but the feed says %.0fs",
+			ep.EpisodeName, res.Clean, want)
+		return os.Rename(paths[0], out)
+	}
+	if res.Removed > 0.25*res.Original {
+		log.Warnf("[RSS] %s: would cut %.0f%% of the episode — keeping the original",
+			ep.YoutubeVideoId, 100*res.Removed/res.Original)
+		events.Error("Ad removal rejected for %s: it would have cut %.0f%% of the episode",
+			ep.EpisodeName, 100*res.Removed/res.Original)
+		return os.Rename(paths[0], out)
+	}
 
 	if err := adstrip.Write(out, res.Frames); err != nil {
 		return fmt.Errorf("writing stripped audio: %w", err)
@@ -120,6 +157,38 @@ func downloadRssEpisode(ep *models.PodcastEpisode, stagingDir string) error {
 	}
 	log.Infof("[RSS] %s: %s", ep.YoutubeVideoId, res.String())
 	return nil
+}
+
+// framesCoverFile reports whether the parsed frames account for essentially the
+// whole file. Real MPEG audio is a contiguous run of frames, so coverage is
+// ~100%; a file that merely contains occasional sync-looking bytes scores a few
+// percent and must not be fed to the intersection.
+func framesCoverFile(path string, frames []adstrip.Frame) bool {
+	if len(frames) == 0 {
+		return false
+	}
+	st, err := os.Stat(path)
+	if err != nil || st.Size() == 0 {
+		return false
+	}
+	var covered int64
+	for _, f := range frames {
+		covered += int64(len(f.Data))
+	}
+	return float64(covered) >= 0.95*float64(st.Size())
+}
+
+// enclosureExt picks the published file's extension from the enclosure URL so
+// the served Content-Type (derived from it) matches the actual bytes.
+func enclosureExt(ep *models.PodcastEpisode) string {
+	u, err := url.Parse(ep.EnclosureUrl)
+	if err == nil {
+		switch e := strings.ToLower(path.Ext(u.Path)); e {
+		case ".mp3", ".m4a", ".mp4", ".aac", ".ogg", ".opus", ".flac", ".wav":
+			return e
+		}
+	}
+	return ".mp3"
 }
 
 func fetchTo(url, dest, agent string) error {

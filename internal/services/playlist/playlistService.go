@@ -16,6 +16,19 @@ import (
 )
 
 func BuildPlaylistRssFeed(youtubePlaylistId string, host string) []byte {
+	// A podcast switched to the RSS source keeps its original YouTube playlist
+	// id, so this used to call playlistItems.list with a synthetic "rssp_..."
+	// id on EVERY feed fetch — a guaranteed 400 from Google, a misleading
+	// "quota reached" error in the log, and wasted quota for the real ones.
+	if p := database.GetPodcast(youtubePlaylistId); p != nil && p.IsRss() {
+		episodes, err := database.GetPodcastEpisodesByPodcastId(youtubePlaylistId, enum.PLAYLIST)
+		if err != nil {
+			log.Error(err)
+			return nil
+		}
+		return rss.GenerateRssFeed(rss.BuildPodcast(*p, episodes), host, enum.PLAYLIST)
+	}
+
 	log.Debug("[RSS FEED] Building rss feed for playlist...")
 	dbPodcast := database.GetPodcast(youtubePlaylistId)
 

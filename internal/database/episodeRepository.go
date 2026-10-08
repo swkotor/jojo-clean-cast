@@ -1,6 +1,7 @@
 package database
 
 import (
+	"gorm.io/gorm/clause"
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/enum"
 	"ikoyhn/podcast-sponsorblock/internal/models"
@@ -15,8 +16,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// SavePlaylistEpisodes inserts episodes, ignoring any that already exist.
+//
+// The caller reads the known-id set and then inserts, which is not atomic: a
+// manual add racing the poller could present the same episode twice and the
+// conflict would roll back the WHOLE batch of up to 100 rows, silently losing
+// 99 good ones. DoNothing makes the race harmless.
 func SavePlaylistEpisodes(playlistEpisodes []models.PodcastEpisode) {
-	db.CreateInBatches(playlistEpisodes, 100)
+	if err := db.Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(playlistEpisodes, 100).Error; err != nil {
+		log.Error("[DB] Could not save episodes: " + err.Error())
+	}
 }
 
 func EpisodeExists(youtubeVideoId string, episodeType string) (bool, error) {

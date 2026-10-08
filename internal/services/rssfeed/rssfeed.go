@@ -8,12 +8,14 @@
 package rssfeed
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -21,11 +23,42 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/labstack/gommon/log"
+
 	"ikoyhn/podcast-sponsorblock/internal/models"
 )
 
+// safeDialer refuses to connect to anything that is not a public address.
+//
+// Resolve() and Fetch() fetch a URL the user supplies, follow redirects, and
+// report the error verbatim — which makes them a port scanner for the host's
+// own network unless this is blocked. Checking in the DIALER rather than on the
+// URL is what makes it sound: it sees every redirect hop and the IP actually
+// resolved, so neither a redirect chain nor a DNS name pointing at 127.0.0.1
+// can slip past.
+var safeDialer = &net.Dialer{Timeout: 15 * time.Second}
+
+func safeDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	for _, ip := range ips {
+		if ip.IP.IsLoopback() || ip.IP.IsPrivate() || ip.IP.IsLinkLocalUnicast() ||
+			ip.IP.IsLinkLocalMulticast() || ip.IP.IsUnspecified() {
+			return nil, fmt.Errorf("refusing to fetch an internal address (%s)", ip.IP)
+		}
+	}
+	return safeDialer.DialContext(ctx, network, addr)
+}
+
 var client = &http.Client{
-	Timeout: 45 * time.Second,
+	Transport: &http.Transport{DialContext: safeDialContext},
+	Timeout:   45 * time.Second,
 	// Apple share links and lnk.to smart links are several redirects deep.
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 12 {
@@ -247,7 +280,9 @@ type Feed struct {
 var dateFormats = []string{
 	time.RFC1123Z, time.RFC1123,
 	"Mon, 2 Jan 2006 15:04:05 -0700", "Mon, 2 Jan 2006 15:04:05 MST",
-	"2006-01-02T15:04:05Z07:00", "2006-01-02 15:04:05",
+	"2 Jan 2006 15:04:05 -0700", "2 Jan 2006 15:04:05 MST",
+	"2006-01-02T15:04:05Z07:00", "2006-01-02T15:04:05.000Z07:00",
+	time.RFC3339Nano, "2006-01-02 15:04:05", "2006-01-02",
 }
 
 func parseDate(s string) time.Time {
@@ -257,7 +292,12 @@ func parseDate(s string) time.Time {
 			return t
 		}
 	}
-	return time.Time{}
+	// Fall back to "now" rather than the zero time. The auto-downloader only
+	// considers episodes published within the last week, and a zero date is
+	// always older than that — so an item whose date we could not parse was
+	// listed in the feed but never downloaded, silently and forever.
+	log.Warnf("[RSS] unparseable pubDate %q — treating as now", s)
+	return time.Now()
 }
 
 // parseDuration accepts the iTunes forms: seconds, M:SS or H:MM:SS.

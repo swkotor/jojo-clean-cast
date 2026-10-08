@@ -39,6 +39,16 @@ func GenerateRssFeed(podcast models.Podcast, host string, podcastType enum.Podca
 	ytPodcast.AddImage(coverUrl)
 	ytPodcast.AddCategory(podcast.Category, []string{""})
 	ytPodcast.Docs = "http://www.rssboard.org/rss-specification"
+	// Apple and Spotify both require these, and clients otherwise guess.
+	// `explicit` is already stored per podcast; language had no value at all.
+	if podcast.Explicit != "" {
+		ytPodcast.IExplicit = podcast.Explicit
+	} else {
+		ytPodcast.IExplicit = "false"
+	}
+	if ytPodcast.Language == "" {
+		ytPodcast.Language = "en"
+	}
 	ytPodcast.IAuthor = podcast.ArtistName
 
 	if podcast.PodcastEpisodes != nil {
@@ -86,7 +96,11 @@ func GenerateRssFeed(podcast models.Podcast, host string, podcastType enum.Podca
 			podcastItem := generator.Item{
 				Title:       podcastEpisode.EpisodeName,
 				Description: description,
-				IDuration:   fmt.Sprintf("%d", int(podcastEpisode.Duration.Seconds())),
+				// Omit rather than publish a zero. More than half of the
+				// YouTube-sourced episodes have no duration stored, and a
+				// literal <duration>0</duration> makes clients show a 0:00
+				// scrub bar instead of simply not knowing the length.
+				IDuration: durationTag(podcastEpisode.Duration),
 				GUID: struct {
 					Value       string `xml:",chardata"`
 					IsPermaLink bool   `xml:"isPermaLink,attr"`
@@ -115,6 +129,15 @@ func GenerateRssFeed(podcast models.Podcast, host string, podcastType enum.Podca
 	}
 
 	return ytPodcast.Bytes()
+}
+
+// durationTag renders an iTunes duration, or "" when it is unknown so the
+// element is left out entirely.
+func durationTag(d time.Duration) string {
+	if secs := int(d.Seconds()); secs > 0 {
+		return fmt.Sprintf("%d", secs)
+	}
+	return ""
 }
 
 func BuildPodcast(podcast models.Podcast, allItems []models.PodcastEpisode) models.Podcast {
