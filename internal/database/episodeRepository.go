@@ -86,6 +86,20 @@ func IsEpisodeSaved(item *ytApi.Video) bool {
 	return false
 }
 
+// sourceScope limits a query to the episodes of the podcast's SELECTED source.
+//
+// A podcast switched from YouTube to RSS keeps BOTH sets of rows. The feed
+// already filtered, but the auto-download poller did not: it built its keep-set
+// and its download list from all of them, so it would fetch YouTube copies of
+// episodes that are not published in the feed, and prune against a keep-set
+// that mixed the two.
+func sourceScope(podcastId string) (string, interface{}) {
+	if p := GetPodcast(podcastId); p != nil && p.IsRss() {
+		return "type = ?", "RSS"
+	}
+	return "type != ?", "RSS"
+}
+
 func GetPodcastEpisodesByPodcastId(podcastId string, podcastType enum.PodcastType) ([]models.PodcastEpisode, error) {
 	var episodes []models.PodcastEpisode
 
@@ -93,11 +107,7 @@ func GetPodcastEpisodesByPodcastId(podcastId string, podcastType enum.PodcastTyp
 	// from YouTube and later had a feed attached (or the reverse). Publishing
 	// all of them would list every episode twice in the subscriber's app, so the
 	// feed only ever contains episodes from the source currently selected.
-	sourceFilter := "type != ?"
-	sourceArg := interface{}("RSS")
-	if p := GetPodcast(podcastId); p != nil && p.IsRss() {
-		sourceFilter = "type = ?"
-	}
+	sourceFilter, sourceArg := sourceScope(podcastId)
 
 	switch podcastType {
 	case enum.PLAYLIST:

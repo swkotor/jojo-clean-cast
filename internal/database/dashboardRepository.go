@@ -19,7 +19,8 @@ func GetAllPodcasts() ([]models.Podcast, error) {
 // GetRecentEpisodes returns the most recent N episodes for a podcast
 func GetRecentEpisodes(podcastId string, limit int) ([]models.PodcastEpisode, error) {
 	var episodes []models.PodcastEpisode
-	err := db.Where("podcast_id = ?", podcastId).
+	f, a := sourceScope(podcastId)
+	err := db.Where("podcast_id = ? AND "+f, podcastId, a).
 		Order("published_date DESC").
 		Limit(limit).
 		Find(&episodes).Error
@@ -186,7 +187,8 @@ func TouchFeedFetch(podcastId string, ts int64) {
 // GetEpisodesBeyondRecent returns episodes after the N most recent ones
 func GetEpisodesBeyondRecent(podcastId string, keep int) ([]models.PodcastEpisode, error) {
 	var episodes []models.PodcastEpisode
-	err := db.Where("podcast_id = ?", podcastId).
+	f, a := sourceScope(podcastId)
+	err := db.Where("podcast_id = ? AND "+f, podcastId, a).
 		Order("published_date DESC").
 		Offset(keep).
 		Find(&episodes).Error

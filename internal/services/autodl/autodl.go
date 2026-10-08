@@ -6,6 +6,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/models"
 	"ikoyhn/podcast-sponsorblock/internal/services/channel"
+	"ikoyhn/podcast-sponsorblock/internal/services/common"
 	"ikoyhn/podcast-sponsorblock/internal/services/downloader"
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
 	"ikoyhn/podcast-sponsorblock/internal/services/playlist"
@@ -463,6 +464,7 @@ func enforceStorageCap() {
 	var files []fileInfo
 	var total int64
 	audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+	owned := ownedDirs()
 	filepath.WalkDir(audioDirAbs, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -479,7 +481,9 @@ func enforceStorageCap() {
 		// Only episodes count towards the cap, and only episodes are freed to
 		// meet it. metadata.json and cover.jpg are tiny and are what keeps a
 		// podcast describable — they were deleted first simply for being oldest.
-		if !database.IsAudioFileName(d.Name()) {
+		// isOurs matters just as much: the audio root is shared with other apps,
+		// and without it this would delete THEIR library to get under our cap.
+		if !database.IsAudioFileName(d.Name()) || !isOurs(audioDirAbs, path, owned) {
 			return nil
 		}
 		if info, err := d.Info(); err == nil {
@@ -508,12 +512,51 @@ func enforceStorageCap() {
 }
 
 // StorageStats returns total files and bytes stored in the audio dir
+// ownedDirs lists the directories this app actually manages.
+//
+// The audio root is SHARED with other apps - audiobookshelf writes its own
+// podcast downloads into it. Walking the whole root meant their files counted
+// towards MAX_STORAGE_GB and, far worse, enforceStorageCap would have DELETED
+// them oldest-first to get under the cap, destroying another application's
+// library.
+func ownedDirs() map[string]bool {
+	owned := map[string]bool{}
+	podcasts, err := database.GetAllPodcasts()
+	if err != nil {
+		return owned
+	}
+	for i := range podcasts {
+		if name := common.SanitizeDirName(podcasts[i].DisplayName()); name != "" {
+			owned[name] = true
+		}
+	}
+	return owned
+}
+
+// isOurs reports whether a path under the audio root belongs to one of our
+// podcasts. Files sitting directly in the root are ours (the pre-folder layout).
+func isOurs(root, path string, owned map[string]bool) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	if len(parts) == 1 {
+		return true
+	}
+	return owned[parts[0]]
+}
+
 func StorageStats() (int, int64) {
 	var count int
 	var total int64
 	audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+	owned := ownedDirs()
 	filepath.WalkDir(audioDirAbs, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
+			return nil
+		}
+		if !database.IsAudioFileName(d.Name()) || !isOurs(audioDirAbs, path, owned) {
 			return nil
 		}
 		if info, err := d.Info(); err == nil {
