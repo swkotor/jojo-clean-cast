@@ -290,18 +290,57 @@ func runRssDownload(ep *models.PodcastEpisode) {
 // on MPEG audio (where cutting is lossless and frame-exact), and it leaves the
 // file untouched on any doubt — a missed ad is an annoyance, a wrong cut
 // destroys part of the show.
+// StripHostReadAdsFor runs the pass over an episode already on disk. Used to
+// work through a backlog after a podcast opts in, without paying for another
+// three downloads of a 145MB episode.
+func StripHostReadAdsFor(videoId string) error {
+	ep, err := database.GetEpisodeByVideoId(videoId)
+	if err != nil || ep == nil {
+		return fmt.Errorf("no such episode")
+	}
+	file := database.FindFileWithId(config.AppConfig.Setup.AudioDir, videoId)
+	if file == "" {
+		return fmt.Errorf("episode is not downloaded")
+	}
+	stripHostReadAds(ep, database.GetPodcast(ep.PodcastId), file)
+	return nil
+}
+
 func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string) {
 	if p == nil || !p.AdTextStrip {
 		return
 	}
-	if strings.ToLower(filepath.Ext(file)) != ".mp3" {
-		log.Infof("[ADTEXT] %s: not MPEG audio, skipping host-read pass", ep.YoutubeVideoId)
-		return
+	if ep.AdTextDone {
+		return // already transcribed this file
 	}
 	cfg := config.AppConfig.Setup.ConfigDir
 	if !adtext.Available(cfg) {
 		if err := adtext.EnsureModel(cfg); err != nil {
 			events.Error("Host-read ad removal unavailable: %v", err)
+			return
+		}
+	}
+
+	// MP3 is cut by dropping frames, which needs no external tool and is
+	// byte-exact. Everything else (the YouTube feeds are AAC in MP4) is cut by
+	// an ffmpeg stream copy, which rebuilds the container's sample tables
+	// without decoding the audio.
+	isMP3 := strings.EqualFold(filepath.Ext(file), ".mp3")
+
+	var total float64
+	var frames []adstrip.Frame
+	if isMP3 {
+		var err error
+		frames, err = adstrip.Parse(file)
+		if err != nil || len(frames) == 0 {
+			log.Errorf("[ADTEXT] %s: could not parse frames", ep.YoutubeVideoId)
+			return
+		}
+		total = adstrip.Duration(frames)
+	} else {
+		var err error
+		if total, err = adtext.ProbeDuration(file); err != nil {
+			log.Errorf("[ADTEXT] %s: %v", ep.YoutubeVideoId, err)
 			return
 		}
 	}
@@ -312,51 +351,60 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 		events.Error("Could not transcribe %s: %v", ep.EpisodeName, err)
 		return
 	}
-	frames, err := adstrip.Parse(file)
-	if err != nil || len(frames) == 0 {
-		return
-	}
-	total := adstrip.Duration(frames)
 	spans := adtext.FindAds(segs, total, adtext.DefaultOptions())
+	// Mark done either way: a clean episode must not be transcribed again on
+	// every pass just because nothing was found.
+	database.MarkAdTextDone(ep.YoutubeVideoId)
 	if len(spans) == 0 {
 		log.Infof("[ADTEXT] %s: %s (transcribed %.0fs in %s)",
 			ep.YoutubeVideoId, adtext.Describe(spans), total, time.Since(started).Round(time.Second))
 		return
 	}
 
-	// Drop the frames inside each span. Frame boundaries are where MPEG audio
-	// can be cut without re-encoding, so this is lossless.
-	keep := make([]adstrip.Frame, 0, len(frames))
-	var at, removed float64
-	for _, f := range frames {
-		inAd := false
-		for _, sp := range spans {
-			if at >= sp.Start && at < sp.End {
-				inAd = true
-				break
+	var removed float64
+	if isMP3 {
+		keep := make([]adstrip.Frame, 0, len(frames))
+		var at float64
+		for _, f := range frames {
+			inAd := false
+			for _, sp := range spans {
+				if at >= sp.Start && at < sp.End {
+					inAd = true
+					break
+				}
 			}
+			if inAd {
+				removed += f.Seconds
+			} else {
+				keep = append(keep, f)
+			}
+			at += f.Seconds
 		}
-		if inAd {
-			removed += f.Seconds
-		} else {
-			keep = append(keep, f)
+		if removed <= 0 {
+			return
 		}
-		at += f.Seconds
-	}
-	if removed <= 0 {
-		return
+		tmp := file + ".adtext"
+		if err := adstrip.Write(tmp, keep); err != nil {
+			os.Remove(tmp)
+			events.Error("Could not write de-added audio for %s: %v", ep.EpisodeName, err)
+			return
+		}
+		if err := os.Rename(tmp, file); err != nil {
+			os.Remove(tmp)
+			events.Error("Could not replace audio for %s: %v", ep.EpisodeName, err)
+			return
+		}
+	} else {
+		if removed, err = adtext.CutStreamCopy(file, spans, total); err != nil {
+			events.Error("Could not remove host-read ads from %s: %v", ep.EpisodeName, err)
+			return
+		}
 	}
 
-	tmp := file + ".adtext"
-	if err := adstrip.Write(tmp, keep); err != nil {
-		os.Remove(tmp)
-		events.Error("Could not write de-added audio for %s: %v", ep.EpisodeName, err)
-		return
-	}
-	if err := os.Rename(tmp, file); err != nil {
-		os.Remove(tmp)
-		events.Error("Could not replace audio for %s: %v", ep.EpisodeName, err)
-		return
+	// the episode is shorter now, so the advertised duration must follow or
+	// clients show a progress bar that runs past the end
+	if d, err := adtext.ProbeDuration(file); err == nil && d > 0 {
+		database.UpdateEpisodeDuration(ep.YoutubeVideoId, int(d))
 	}
 	events.Info("Removed %.0fs of host-read ads from %s (%s)",
 		removed, ep.EpisodeName, adtext.Describe(spans))

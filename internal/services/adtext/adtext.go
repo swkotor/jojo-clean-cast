@@ -114,10 +114,19 @@ func hhmmss(s string) float64 {
 // Runs on CPU deliberately. The box has a GPU, but it is shared with Plex and
 // immich, and a model resident in VRAM would collide with a transcode; this
 // work is bursty background processing where ~14x realtime is plenty.
+// transcribing is the single transcription slot. whisper saturates every core
+// it is given, so two at once take twice as long each and leave nothing for
+// serving audio — observed with a download-path run and a backlog run
+// overlapping. Serialising costs nothing in throughput and keeps the box
+// responsive.
+var transcribing = make(chan struct{}, 1)
+
 func Transcribe(configDir, audioPath string, threads int) ([]Segment, error) {
 	if err := EnsureModel(configDir); err != nil {
 		return nil, err
 	}
+	transcribing <- struct{}{}
+	defer func() { <-transcribing }()
 	work, err := os.MkdirTemp("", "adtext")
 	if err != nil {
 		return nil, err

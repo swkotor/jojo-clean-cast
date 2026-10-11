@@ -28,6 +28,9 @@ type PodcastEpisode struct {
 	// special-casing.
 	EnclosureUrl string `json:"enclosure_url"`
 	Guid         string `json:"guid" gorm:"index"`
+	// Set once the host-read (transcription) pass has run on the file now on
+	// disk, so re-processing a backlog is resumable and never loops.
+	AdTextDone bool `json:"ad_text_done"`
 }
 
 type Podcast struct {

@@ -259,3 +259,38 @@ func ListAudioFileNames(baseDir string) []string {
 	}
 	return names
 }
+
+// MarkAdTextDone records that the host-read transcription pass has run on the
+// file currently on disk for this episode.
+func MarkAdTextDone(videoId string) {
+	if err := db.Model(&models.PodcastEpisode{}).
+		Where("youtube_video_id = ?", videoId).
+		Update("ad_text_done", true).Error; err != nil {
+		log.Error("[DB] Could not mark ad-text done for " + videoId + ": " + err.Error())
+	}
+}
+
+// EpisodesNeedingAdText lists downloaded episodes of opted-in podcasts that
+// have not had the host-read pass yet — the backlog after opting in.
+func EpisodesNeedingAdText() ([]models.PodcastEpisode, error) {
+	var eps []models.PodcastEpisode
+	err := db.Where(`COALESCE(ad_text_done,0) = 0 AND podcast_id IN
+		(SELECT id FROM podcasts WHERE ad_text_strip = 1)`).
+		Order("published_date DESC").
+		Find(&eps).Error
+	return eps, err
+}
+
+// UpdateEpisodeDuration rewrites the stored length of an episode. Called after
+// ads are cut, so the feed advertises the length of the file that is actually
+// on disk rather than the original.
+func UpdateEpisodeDuration(videoId string, seconds int) {
+	if seconds <= 0 {
+		return
+	}
+	if err := db.Model(&models.PodcastEpisode{}).
+		Where("youtube_video_id = ?", videoId).
+		Update("duration", seconds).Error; err != nil {
+		log.Error("[DB] Could not update duration for " + videoId + ": " + err.Error())
+	}
+}

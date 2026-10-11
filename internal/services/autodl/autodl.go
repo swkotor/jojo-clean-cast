@@ -304,6 +304,73 @@ func refreshChangedCuts() {
 	}
 }
 
+// how long an episode must sit untouched before the host-read pass will
+// rewrite it — the same idle rule the re-cut pass uses, so we never swap the
+// file out from under a client that is mid-stream.
+const adTextIdlePeriod = 15 * time.Minute
+
+// hostAdDraining keeps the backlog to one worker: transcription is CPU-heavy
+// and two at once would starve everything else on the box.
+var hostAdDraining sync.Mutex
+
+// DrainHostAdBacklog transcribes already-downloaded episodes of podcasts that
+// have since opted in to host-read ad removal.
+//
+// Without this, turning the option on would only affect future downloads, and
+// catching up would mean re-downloading every episode three times over (the
+// differential pass needs multiple variants) — hundreds of megabytes to redo
+// work we can do locally from the file already on disk.
+//
+// Deliberately serial and one episode per call: a 2.5-hour episode is roughly
+// ten minutes of CPU, so a backlog drains over a few polls rather than pinning
+// the server for an hour.
+func DrainHostAdBacklog() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("[ADTEXT] backlog pass panic: %v", r)
+		}
+	}()
+	if !hostAdDraining.TryLock() {
+		return // a previous pass is still working
+	}
+	defer hostAdDraining.Unlock()
+
+	eps, err := database.EpisodesNeedingAdText()
+	if err != nil || len(eps) == 0 {
+		return
+	}
+	audioDirAbs, err := filepath.Abs(config.AppConfig.Setup.AudioDir)
+	if err != nil {
+		return
+	}
+	// Most rows in the backlog are episodes that were never downloaded, so
+	// count the ones actually on disk before reporting a queue length.
+	cutoff := time.Now().Add(-adTextIdlePeriod).Unix()
+	var onDisk []models.PodcastEpisode
+	for _, ep := range eps {
+		if database.FileExistsWithId(audioDirAbs, ep.YoutubeVideoId) {
+			onDisk = append(onDisk, ep)
+		}
+	}
+	if len(onDisk) == 0 {
+		return
+	}
+	for _, ep := range onDisk {
+		if IsDownloading(ep.YoutubeVideoId) {
+			continue
+		}
+		if h := database.GetEpisodePlaybackHistory(ep.YoutubeVideoId); h != nil && h.LastAccessDate > cutoff {
+			continue // a client may still be streaming it
+		}
+		events.Info("Transcribing %s to remove host-read ads (%d episode(s) queued)",
+			ep.EpisodeName, len(onDisk))
+		if err := downloader.StripHostReadAdsFor(ep.YoutubeVideoId); err != nil {
+			log.Errorf("[ADTEXT] %s: %v", ep.YoutubeVideoId, err)
+		}
+		return // one per pass
+	}
+}
+
 func absDiff(a, b float64) float64 {
 	if a > b {
 		return a - b
@@ -326,6 +393,7 @@ func runOnce() {
 	}
 
 	defer refreshChangedCuts()
+	defer DrainHostAdBacklog()
 
 	// group children under parents
 	children := map[string][]models.Podcast{}
