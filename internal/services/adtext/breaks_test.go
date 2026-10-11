@@ -84,3 +84,28 @@ func TestIgnoresAnUnterminatedCue(t *testing.T) {
 		t.Fatalf("expected no cuts, got %v", got)
 	}
 }
+
+// From the real transcript of Game Mess Mornings dfMZkd4vQHM, where whisper
+// produced 1578 short segments instead of 596 long ones. The cue sentence is
+// split across three of them, which a per-segment match missed entirely.
+func TestFindsTheHandoffAcrossShortSegments(t *testing.T) {
+	s := segs(
+		[3]any{1986, 1988, "what kids know you're from and that's"},
+		[3]any{1988, 1990, "exactly uh all right we're gonna take a"},
+		[3]any{1990, 1992, "break when we come back plenty of headlines"},
+		[3]any{1992, 1994, "to get into if you want to skip out on"},
+		[3]any{1994, 1995, "these ad messages we give you way to do"},
+		[3]any{1995, 1997, "that giant bomb dot com slash join has the"},
+		[3]any{1997, 1999, "ad free version of the audio and video"},
+		[3]any{1999, 2001, "show there go grab those we will be"},
+		[3]any{2001, 2004, "right back"},
+		[3]any{2008, 2010, "all right we are back it's game mass"},
+	)
+	got := FindBreakAnnouncements(s)
+	if len(got) != 1 {
+		t.Fatalf("expected one span, got %d: %v", len(got), got)
+	}
+	if got[0].Start != 1988 || got[0].End != 2004 {
+		t.Fatalf("expected 1988-2004, got %.0f-%.0f", got[0].Start, got[0].End)
+	}
+}
