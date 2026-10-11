@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -268,6 +269,10 @@ func FindAds(segs []Segment, total float64, o Options) []Span {
 		i = j
 	}
 
+	// Scripted "we'll be right back" hand-offs are found structurally rather
+	// than by sponsor wording — see breaks.go for why the two are separate.
+	spans = mergeSpans(append(spans, FindBreakAnnouncements(segs)...))
+
 	// Final safety net: if the rules somehow select a big share of the episode
 	// they are wrong about something, and dropping the audio is worse than
 	// leaving the ads in. Cut nothing rather than guess.
@@ -280,6 +285,28 @@ func FindAds(segs []Segment, total float64, o Options) []Span {
 		return nil
 	}
 	return spans
+}
+
+// mergeSpans sorts spans and unions any that touch, so the two detectors
+// cannot produce overlapping cuts (which would double-count the removed time
+// and make the log misleading).
+func mergeSpans(in []Span) []Span {
+	if len(in) < 2 {
+		return in
+	}
+	sort.Slice(in, func(i, j int) bool { return in[i].Start < in[j].Start })
+	out := in[:1]
+	for _, sp := range in[1:] {
+		last := &out[len(out)-1]
+		if sp.Start <= last.End {
+			if sp.End > last.End {
+				last.End = sp.End
+			}
+			continue
+		}
+		out = append(out, sp)
+	}
+	return out
 }
 
 // Describe renders spans for the event log.
