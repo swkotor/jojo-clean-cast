@@ -43,6 +43,41 @@ dashboard and automation features, deployed on Unraid as `jojo-podcasts`.
 - **Per-podcast storage** in `AUDIO_DIR/<podcast title>/`
 - `/healthz` + Docker HEALTHCHECK
 
+### Ad removal (three layers, each covering what the others cannot)
+
+1. **SponsorBlock** — community-marked segments on the YouTube source.
+2. **Differential stripping** (`internal/services/adstrip/`) — downloads an
+   episode 3x (`AD_STRIP_VARIANTS`) and keeps only the MPEG frames present in
+   every copy. Hosts stitch ads per-listener, so the show frames are
+   byte-identical across downloads and only the ads differ. Measured 98.6-99.0%
+   of frames shared. RSS episodes only; costs the extra downloads.
+3. **Host-read removal** (`internal/services/adtext/`, opt-in per podcast via
+   the "Host ads" chip) — transcribes the episode with whisper.cpp and cuts what
+   the hosts read aloud, which is baked into the master and so invisible to both
+   layers above. Two detectors:
+   - *sponsor scoring* (`adtext.go`): a segment needs BOTH a sponsor noun and a
+     call to action; tuned and tested against a real VGC episode.
+   - *break hand-off* (`breaks.go`): an opening cue, a closing cue within 90s,
+     and an ad mention in between. Giant Bomb's shows do not read sponsor copy,
+     they announce the break — and the inserted ad is already gone by then, so
+     what is left is the announcement for an ad that is not there.
+
+   Cuts are lossless: MP3 by dropping frames, AAC/MP4 by an ffmpeg stream copy
+   that rebuilds the sample tables (plus `+faststart`, which Apple Podcasts
+   needs). Results are duration-checked before replacing the episode, and the
+   stored duration follows the shorter file.
+
+   Transcription is serialised process-wide and runs one episode per poll
+   (`DrainHostAdBacklog`), idle-gated, with `podcast_episodes.ad_text_done` so a
+   backlog is resumable and a clean episode is never transcribed twice. Budget
+   roughly realtime/5 of CPU per episode on a busy box.
+
+   **Known limits**: whisper segments are several seconds long, so a cut takes a
+   second or two of neighbouring speech. And it does not touch a pitch that is
+   interleaved with the conversation sentence by sentence — the Giant Bomb shows'
+   opening premium plug is improvised banter wrapped around real content, and
+   nothing span-based can remove it without taking the show too.
+
 ## Environment variables (added)
 
 | Var | Default | Purpose |
