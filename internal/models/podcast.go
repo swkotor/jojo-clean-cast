@@ -69,6 +69,10 @@ type Podcast struct {
 	// being re-added.
 	SourceType string `json:"source_type"`
 	FeedUrl    string `json:"feed_url"`
+	// Opt-in: transcribe episodes and cut HOST-READ ads too. Off by default —
+	// it costs several minutes of CPU per episode and, unlike the differential
+	// strip, it is a judgement about content rather than a byte comparison.
+	AdTextStrip bool `json:"ad_text_strip"`
 }
 
 // Source reports the effective episode source, defaulting to YouTube. An "rss"

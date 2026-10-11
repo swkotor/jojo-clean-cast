@@ -418,6 +418,7 @@ async function load() {
               <span class="ep-count">${p.episodeCount} episodes</span>
               <a class="yt-link" target="_blank" rel="noopener" href="${ytUrl}">▶ YouTube</a>
               <button class="chip ${p.sbCategories ? 'on' : ''}" title="SponsorBlock categories for this feed" onclick="openSbEditor(${jsq(p.id)})">SB: ${esc(p.sbCategories || sbDefault || 'sponsor')}</button>
+              <button class="chip ${p.adTextStrip ? 'on' : ''}" title="Also transcribe each episode and cut ads the hosts read aloud. Costs a few minutes of CPU per episode." onclick="toggleAdText(${jsq(p.id)}, ${!!p.adTextStrip})">Host ads: ${p.adTextStrip ? 'CUT' : 'keep'}</button>
               <button class="chip ${p.source === 'rss' ? 'on' : ''}" title="Where episodes are pulled from. RSS strips ads by comparing two downloads of the same episode; YouTube uses SponsorBlock." onclick="openSource(${jsq(p.id)})">Source: ${p.source === 'rss' ? 'RSS' : 'YouTube'}</button>
               ${!isVirtual ? `<button class="chip" title="Create a filtered sub-feed from a recurring series in this feed" onclick="openSplit(${jsq(p.id)})">⑂ Split</button>` : ''}
               ${p.lastFeedFetch ? `<span class="ep-count" title="Last time a podcast app fetched this feed">· polled ${ago(p.lastFeedFetch)}</span>` : ''}
@@ -922,6 +923,7 @@ async function saveSb(useDefault) {
 }
 function toggleSubscribed(id, current) { patchPodcast(id, { subscribed: !current }); }
 function toggleAutoDl(id, current) { patchPodcast(id, { autoDownload: !current }); }
+function toggleAdText(id, current) { patchPodcast(id, { adTextStrip: !current }); }
 
 async function downloadEpisode(videoId, btn) {
   btn.textContent = 'Starting…';

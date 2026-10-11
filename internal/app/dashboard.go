@@ -62,8 +62,10 @@ type dashboardPodcast struct {
 	SbCategories  string `json:"sbCategories"`
 	// Where episodes come from ("youtube" or "rss") and the attached feed, so
 	// the dashboard can show and switch the per-podcast source preference.
-	Source        string             `json:"source"`
-	FeedUrl       string             `json:"feedUrl"`
+	Source  string `json:"source"`
+	FeedUrl string `json:"feedUrl"`
+	// Whether this podcast also has host-read ads cut by transcription.
+	AdTextStrip   bool               `json:"adTextStrip"`
 	ChannelId     string             `json:"channelId"`
 	ChannelTitle  string             `json:"channelTitle"`
 	ChannelThumb  string             `json:"channelThumb"`
@@ -181,6 +183,7 @@ func registerDashboardRoutes(e *echo.Echo) {
 				SbCategories:  p.SponsorblockCategories,
 				Source:        p.Source(),
 				FeedUrl:       p.FeedUrl,
+				AdTextStrip:   p.AdTextStrip,
 				ChannelId:     p.ChannelId,
 				ChannelTitle:  p.ChannelTitle,
 				ChannelThumb:  p.ChannelThumb,
@@ -269,8 +272,9 @@ func registerDashboardRoutes(e *echo.Echo) {
 			// Per-podcast source preference. A show published in BOTH places
 			// can carry a YouTube id and a feed url at once; `source` picks
 			// which one episodes are pulled from, without re-adding the show.
-			FeedUrl *string `json:"feedUrl"`
-			Source  *string `json:"source"`
+			FeedUrl     *string `json:"feedUrl"`
+			Source      *string `json:"source"`
+			AdTextStrip *bool   `json:"adTextStrip"`
 		}
 		if err := c.Bind(&req); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
@@ -346,6 +350,16 @@ func registerDashboardRoutes(e *echo.Echo) {
 					}
 				}(id)
 			}
+		}
+		if req.AdTextStrip != nil {
+			p.AdTextStrip = *req.AdTextStrip
+			database.UpdatePodcast(p)
+			state := "enabled"
+			if !*req.AdTextStrip {
+				state = "disabled"
+			}
+			events.Info("Host-read ad removal %s for %s", state, p.DisplayName())
+			p = database.GetPodcast(id)
 		}
 		if req.SbCategories != nil {
 			cats := strings.TrimSpace(*req.SbCategories)
