@@ -314,11 +314,9 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 		return // already scanned under the current rules
 	}
 	cfg := config.AppConfig.Setup.ConfigDir
-	if !adtext.Available(cfg) {
-		if err := adtext.EnsureModel(cfg); err != nil {
-			events.Error("Host-read ad removal unavailable: %v", err)
-			return
-		}
+	if err := adtext.Ready(cfg); err != nil {
+		events.Error("Host-read ad removal unavailable: %v", err)
+		return
 	}
 
 	// MP3 is cut by dropping frames, which needs no external tool and is

@@ -67,6 +67,30 @@ dashboard and automation features, deployed on Unraid as `jojo-podcasts`.
    needs). Results are duration-checked before replacing the episode, and the
    stored duration follows the shorter file.
 
+   - *brand repetition* (`brand.go`): the advertiser's name repeated inside one
+     short stretch and absent from the rest of the episode, next to its own
+     address. Finds ads performed as a bit, which carry no sponsor vocabulary at
+     all — a 75s Merchantech spot on Game Mess Mornings was invisible to
+     everything else. The address check is what makes it safe: without it the
+     detector fired on any subject discussed in a burst.
+
+   Signals are matched in a 10s WINDOW (whisper's segmentation varies hugely —
+   958 segments vs 313 for the same audio depending on the engine), but whether
+   a segment BELONGS to a read is judged on its own text; using the window for
+   both made every segment beside an ad look like one. Joining is time-aware:
+   transcript segments skip silence, so index-adjacent can be minutes apart.
+
+   `adtext.RulesRevision` is recorded per episode, so improving the rules
+   re-opens the episodes scanned under the weaker ones.
+
+   **Transcription runs on the GPU sidecar** (`jojo-transcriber`, port 9000,
+   `deploy-transcriber.sh`, `TRANSCRIBER_URL`). It is optional — the app falls
+   back to the bundled whisper.cpp — but whisper.cpp on CPU does not merely run
+   slower, it LOSES speech: across the 50s holding a Kinda Funny membership
+   pitch it produced the single line "Are you an influencer?" where
+   faster-whisper produced eleven accurate ones. Detection cannot find an ad
+   that is missing from the transcript. GPU is 65-105x realtime against ~5x.
+
    Transcription is serialised process-wide and runs one episode per poll
    (`DrainHostAdBacklog`), idle-gated, with `podcast_episodes.ad_text_done` so a
    backlog is resumable and a clean episode is never transcribed twice. Budget

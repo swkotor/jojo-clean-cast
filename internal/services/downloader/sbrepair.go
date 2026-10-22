@@ -63,11 +63,9 @@ func VerifySponsorBlock(videoId, title, file string) float64 {
 		videoId, offered, fileDur, videoDur)
 
 	cfg := config.AppConfig.Setup.ConfigDir
-	if !adtext.Available(cfg) {
-		if err := adtext.EnsureModel(cfg); err != nil {
-			events.Error("Cannot repair %s: %v", title, err)
-			return 0
-		}
+	if err := adtext.Ready(cfg); err != nil {
+		events.Error("Cannot repair %s: %v", title, err)
+		return 0
 	}
 	started := time.Now()
 	tsegs, err := adtext.Transcribe(cfg, file, 8)

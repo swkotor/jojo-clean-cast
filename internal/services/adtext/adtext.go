@@ -123,11 +123,23 @@ func hhmmss(s string) float64 {
 var transcribing = make(chan struct{}, 1)
 
 func Transcribe(configDir, audioPath string, threads int) ([]Segment, error) {
+	transcribing <- struct{}{}
+	defer func() { <-transcribing }()
+
+	// Prefer the GPU sidecar when one is configured. whisper.cpp here is not
+	// just slower, it loses speech: on a 66-minute episode it returned 313
+	// segments against the sidecar's 958, and across the 50s holding a
+	// membership pitch it produced the single line "Are you an influencer?".
+	// Detection cannot find an ad that is missing from the transcript.
+	if segs, err := transcribeRemote(audioPath); err == nil {
+		return segs, nil
+	} else if remoteURL() != "" {
+		log.Warnf("[ADTEXT] sidecar unavailable (%v); falling back to whisper.cpp", err)
+	}
+
 	if err := EnsureModel(configDir); err != nil {
 		return nil, err
 	}
-	transcribing <- struct{}{}
-	defer func() { <-transcribing }()
 	work, err := os.MkdirTemp("", "adtext")
 	if err != nil {
 		return nil, err
