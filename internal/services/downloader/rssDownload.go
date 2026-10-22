@@ -310,8 +310,8 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 	if p == nil || !p.AdTextStrip {
 		return
 	}
-	if ep.AdTextDone {
-		return // already transcribed this file
+	if ep.AdTextRev >= adtext.RulesRevision {
+		return // already scanned under the current rules
 	}
 	cfg := config.AppConfig.Setup.ConfigDir
 	if !adtext.Available(cfg) {
@@ -354,7 +354,7 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 	spans := adtext.FindAds(segs, total, adtext.DefaultOptions())
 	// Mark done either way: a clean episode must not be transcribed again on
 	// every pass just because nothing was found.
-	database.MarkAdTextDone(ep.YoutubeVideoId)
+	database.MarkAdTextDone(ep.YoutubeVideoId, adtext.RulesRevision)
 	if len(spans) == 0 {
 		log.Infof("[ADTEXT] %s: %s (transcribed %.0fs in %s)",
 			ep.YoutubeVideoId, adtext.Describe(spans), total, time.Since(started).Round(time.Second))

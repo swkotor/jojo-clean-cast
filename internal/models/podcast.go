@@ -28,9 +28,14 @@ type PodcastEpisode struct {
 	// special-casing.
 	EnclosureUrl string `json:"enclosure_url"`
 	Guid         string `json:"guid" gorm:"index"`
-	// Set once the host-read (transcription) pass has run on the file now on
-	// disk, so re-processing a backlog is resumable and never loops.
-	AdTextDone bool `json:"ad_text_done"`
+	// Which adtext.RulesRevision the host-read pass last ran on this file
+	// under; 0 means never. Keeping the revision rather than a bool makes a
+	// backlog resumable AND lets a rules improvement re-open old episodes.
+	AdTextRev int `json:"ad_text_rev"`
+	// Whether the SponsorBlock result for the file now on disk has been
+	// checked against its actual duration. Episodes downloaded before that
+	// check existed may still carry ads yt-dlp silently declined to remove.
+	SbChecked bool `json:"sb_checked"`
 }
 
 type Podcast struct {

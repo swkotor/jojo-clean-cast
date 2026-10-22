@@ -5,6 +5,7 @@ import (
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/enum"
 	"ikoyhn/podcast-sponsorblock/internal/models"
+	"ikoyhn/podcast-sponsorblock/internal/services/adtext"
 	"os"
 	"path"
 	"strings"
@@ -260,22 +261,23 @@ func ListAudioFileNames(baseDir string) []string {
 	return names
 }
 
-// MarkAdTextDone records that the host-read transcription pass has run on the
-// file currently on disk for this episode.
-func MarkAdTextDone(videoId string) {
+// MarkAdTextDone records which rules revision the host-read pass ran under on
+// the file currently on disk for this episode.
+func MarkAdTextDone(videoId string, rev int) {
 	if err := db.Model(&models.PodcastEpisode{}).
 		Where("youtube_video_id = ?", videoId).
-		Update("ad_text_done", true).Error; err != nil {
+		Update("ad_text_rev", rev).Error; err != nil {
 		log.Error("[DB] Could not mark ad-text done for " + videoId + ": " + err.Error())
 	}
 }
 
 // EpisodesNeedingAdText lists downloaded episodes of opted-in podcasts that
-// have not had the host-read pass yet — the backlog after opting in.
+// have not been scanned under the CURRENT rules — the backlog after opting in,
+// and after a rules improvement.
 func EpisodesNeedingAdText() ([]models.PodcastEpisode, error) {
 	var eps []models.PodcastEpisode
-	err := db.Where(`COALESCE(ad_text_done,0) = 0 AND podcast_id IN
-		(SELECT id FROM podcasts WHERE ad_text_strip = 1)`).
+	err := db.Where(`COALESCE(ad_text_rev,0) < ? AND podcast_id IN
+		(SELECT id FROM podcasts WHERE ad_text_strip = 1)`, adtext.RulesRevision).
 		Order("published_date DESC").
 		Find(&eps).Error
 	return eps, err
@@ -288,9 +290,34 @@ func UpdateEpisodeDuration(videoId string, seconds int) {
 	if seconds <= 0 {
 		return
 	}
+	// PodcastEpisode.Duration is a time.Duration, i.e. NANOSECONDS. Writing a
+	// seconds value here stored a number a billion times too small, which
+	// durationTag then rendered as zero and omitted — so every episode the ad
+	// passes successfully trimmed lost its <itunes:duration> in the feed.
+	d := time.Duration(seconds) * time.Second
 	if err := db.Model(&models.PodcastEpisode{}).
 		Where("youtube_video_id = ?", videoId).
-		Update("duration", seconds).Error; err != nil {
+		Update("duration", d).Error; err != nil {
 		log.Error("[DB] Could not update duration for " + videoId + ": " + err.Error())
 	}
+}
+
+// MarkSbChecked records that the SponsorBlock result for this episode's file
+// has been verified (and repaired if it needed it).
+func MarkSbChecked(videoId string) {
+	if err := db.Model(&models.PodcastEpisode{}).
+		Where("youtube_video_id = ?", videoId).
+		Update("sb_checked", true).Error; err != nil {
+		log.Error("[DB] Could not mark sb checked for " + videoId + ": " + err.Error())
+	}
+}
+
+// EpisodesNeedingSbCheck lists downloaded YouTube episodes whose SponsorBlock
+// result has never been verified against the file.
+func EpisodesNeedingSbCheck() ([]models.PodcastEpisode, error) {
+	var eps []models.PodcastEpisode
+	err := db.Where("COALESCE(sb_checked,0) = 0 AND youtube_video_id NOT LIKE 'rss_%'").
+		Order("published_date DESC").
+		Find(&eps).Error
+	return eps, err
 }

@@ -226,10 +226,17 @@ func runDownload(youtubeVideoId string, forceRedownload bool, done chan struct{}
 				log.Errorf("[DOWNLOAD] promote failed for %s: %v", youtubeVideoId, err)
 				return
 			}
-			// Record what SponsorBlock removed from THIS file, so a later
-			// serve doesn't mistake "no baseline" for "the segments changed"
-			// and re-download the episode out from under a streaming client.
-			database.SetSkipBaseline(youtubeVideoId, sponsorblock.TotalSponsorTimeSkipped(youtubeVideoId))
+			// Record what was ACTUALLY removed from this file, measured from
+			// its duration — not what SponsorBlock offered. yt-dlp silently
+			// declines segments whose video duration disagrees with the
+			// file's, and recording the offered time then told the drift
+			// check everything was fine while the ads were still in there.
+			file := database.FindFileWithId(config.AppConfig.Setup.AudioDir, youtubeVideoId)
+			if file != "" {
+				database.SetSkipBaseline(youtubeVideoId, VerifySponsorBlock(youtubeVideoId, title, file))
+			} else {
+				database.SetSkipBaseline(youtubeVideoId, sponsorblock.TotalSponsorTimeSkipped(youtubeVideoId))
+			}
 			log.Infof("%s download completed successfully.", title)
 			ntfy.SendNotification(fmt.Sprintf("%s download success!", title), "Clean Cast - Success")
 		}

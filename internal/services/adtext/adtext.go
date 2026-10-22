@@ -215,6 +215,19 @@ type Options struct {
 	MaxFraction float64 // ...nor more than this share of it
 }
 
+// RulesRevision identifies the current detection rules. An episode records
+// the revision it was processed under, so improving the rules re-opens the
+// episodes that were scanned with the weaker ones.
+//
+// BUMP THIS whenever a change makes the rules find something they previously
+// missed. Without it, "already transcribed" meant "never looked at again": VGC
+// episodes scanned on 11 Oct, hours before the break-detection rules landed,
+// kept a 15s Patreon pre-roll the current rules detect cleanly.
+//
+//	1 - sponsor scoring only
+//	2 - break hand-off detection (breaks.go), transcript-wide matching
+const RulesRevision = 2
+
 func DefaultOptions() Options {
 	return Options{MinSpan: 8, MaxSpan: 180, MaxTotal: 300, MaxFraction: 0.15}
 }

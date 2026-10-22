@@ -313,6 +313,55 @@ const adTextIdlePeriod = 15 * time.Minute
 // and two at once would starve everything else on the box.
 var hostAdDraining sync.Mutex
 
+// sbChecking keeps the SponsorBlock verification backlog to one worker: a
+// repair transcribes the episode, which must not run twice at once.
+var sbChecking sync.Mutex
+
+// DrainSbCheckBacklog verifies that SponsorBlock was really applied to
+// already-downloaded episodes, and repairs the ones where it was not.
+//
+// Needed because the old code recorded the offered skip time rather than the
+// measured one, so a download where yt-dlp removed nothing looked identical in
+// the database to one where it worked. Those episodes are still on disk with
+// their ads in; nothing would ever have revisited them.
+func DrainSbCheckBacklog() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("[SB] verify pass panic: %v", r)
+		}
+	}()
+	if !sbChecking.TryLock() {
+		return
+	}
+	defer sbChecking.Unlock()
+
+	eps, err := database.EpisodesNeedingSbCheck()
+	if err != nil || len(eps) == 0 {
+		return
+	}
+	audioDirAbs, err := filepath.Abs(config.AppConfig.Setup.AudioDir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-adTextIdlePeriod).Unix()
+	for _, ep := range eps {
+		file := database.FindFileWithId(audioDirAbs, ep.YoutubeVideoId)
+		if file == "" {
+			continue // not downloaded; nothing to measure
+		}
+		if IsDownloading(ep.YoutubeVideoId) {
+			continue
+		}
+		if h := database.GetEpisodePlaybackHistory(ep.YoutubeVideoId); h != nil && h.LastAccessDate > cutoff {
+			continue // a client may still be streaming it
+		}
+		removed := downloader.VerifySponsorBlock(ep.YoutubeVideoId, ep.EpisodeName, file)
+		database.SetSkipBaseline(ep.YoutubeVideoId, removed)
+		database.MarkSbChecked(ep.YoutubeVideoId)
+		return // one per pass: a repair costs a full transcription
+	}
+}
+
 // DrainHostAdBacklog transcribes already-downloaded episodes of podcasts that
 // have since opted in to host-read ad removal.
 //
@@ -394,6 +443,7 @@ func runOnce() {
 
 	defer refreshChangedCuts()
 	defer DrainHostAdBacklog()
+	defer DrainSbCheckBacklog()
 
 	// group children under parents
 	children := map[string][]models.Podcast{}
