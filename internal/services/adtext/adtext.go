@@ -287,7 +287,8 @@ func window(segs []Segment, i int, radius float64) string {
 //	2 - break hand-off detection (breaks.go), transcript-wide matching
 //	3 - signals matched in a window, not per segment
 //	4 - tightened "go to", "a month", merch and tier patterns
-const RulesRevision = 4
+//	5 - brand-repetition reads (brand.go)
+const RulesRevision = 5
 
 func DefaultOptions() Options {
 	return Options{MinSpan: 8, MaxSpan: 180, MaxTotal: 300, MaxFraction: 0.15}
@@ -380,6 +381,9 @@ func FindAds(segs []Segment, total float64, o Options) []Span {
 	// Scripted "we'll be right back" hand-offs are found structurally rather
 	// than by sponsor wording — see breaks.go for why the two are separate.
 	spans = mergeSpans(append(spans, FindBreakAnnouncements(segs)...))
+	// Ads performed as a bit carry none of the sponsor vocabulary; they are
+	// found by the advertiser's name being repeated — see brand.go.
+	spans = mergeSpans(append(spans, FindBrandReads(segs, total)...))
 
 	// Final safety net: if the rules somehow select a big share of the episode
 	// they are wrong about something, and dropping the audio is worse than
