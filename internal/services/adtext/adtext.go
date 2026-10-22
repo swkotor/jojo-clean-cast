@@ -172,14 +172,14 @@ func Transcribe(configDir, audioPath string, threads int) ([]Segment, error) {
 // A call to action is what separates an ad read from talking ABOUT a sponsor.
 // "still on the Patreon" is conversation; "head to patreon.com/x" is an ad.
 var ctaPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\b(head|go|jump|pop) (on )?(over )?to\b`),
+	regexp.MustCompile(`(?i)\b(head|go|jump|pop) (on )?(over )?to\b.{0,40}(\.(com|co\.uk|net|org|io|tv)\b|\bdot com\b|\bslash\b|\bstore\b)`),
 	regexp.MustCompile(`(?i)\b(sign|signing) up\b`),
 	regexp.MustCompile(`(?i)\b(visit|check out)\b.{0,30}\.(com|co\.uk|net|org|tv|fm|io)\b`),
 	regexp.MustCompile(`(?i)\b(use|with) (the )?(promo |discount )?code\b`),
 	regexp.MustCompile(`(?i)\bslash [a-z]`),
 	regexp.MustCompile(`(?i)\b(dot|\.)(com|co\.uk|net|org)\b.{0,20}\bslash\b`),
 	regexp.MustCompile(`(?i)\b(subscribe|support) (to |the )?(us|the show|this podcast)\b`),
-	regexp.MustCompile(`(?i)\b(per|a) month\b`),
+	regexp.MustCompile(`(?i)([$£€]\s?\d+|\b\d+ (pounds|dollars|euros|bucks)) ?(a|per) month\b|\bfor as little as\b`),
 	regexp.MustCompile(`(?i)\b(free trial|first month free|percent off|% off)\b`),
 }
 
@@ -191,11 +191,11 @@ var sponsorPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bbrought to you by\b`),
 	regexp.MustCompile(`(?i)\b(this episode|today's episode) is (supported|sponsored)\b`),
 	regexp.MustCompile(`(?i)\bthanks? to our (sponsor|supporters)\b`),
-	regexp.MustCompile(`(?i)\b(merch|membership|members)\b`),
+	regexp.MustCompile(`(?i)\b(membership|members)\b|\bmerch (store|shop)\b`),
 	// The tail of a membership pitch ("at our higher tiers you'll also get...")
 	// carries no URL and no sponsor noun, so without this the span stopped
 	// short and left the last few seconds of the ad in.
-	regexp.MustCompile(`(?i)\b(tier|tiers|bonus episodes|early access)\b`),
+	regexp.MustCompile(`(?i)\b(higher|top|upper) tiers?\b|\btiers? you'?ll\b|\b(bonus episodes|early access)\b`),
 }
 
 func matches(pats []*regexp.Regexp, s string) bool {
@@ -215,6 +215,65 @@ type Options struct {
 	MaxFraction float64 // ...nor more than this share of it
 }
 
+// signalWindow is how far either side of a segment the sponsor and
+// call-to-action signals may sit and still count as co-occurring. About one
+// sentence of speech: wide enough to span whisper's fragmentation, narrow
+// enough that a sponsor noun here and an unrelated "check out" a minute away
+// do not combine.
+const signalWindow = 10.0
+
+// maxJoinGap is the largest silence two segments may be separated by and still
+// be treated as one continuous read.
+//
+// Neighbouring INDEX is not neighbouring TIME. A transcript's segments skip
+// over anything unspoken, so segment n+1 can be minutes after segment n — and
+// joining across such a gap once produced a 456s "ad" that spanned from the
+// intro to a passing Patreon mention seven minutes later, which the span
+// length check then discarded, losing the real ad with it.
+const maxJoinGap = 10.0
+
+// bridgeSpan is the largest stretch of keyword-free speech that may sit inside
+// a single read without ending it.
+const bridgeSpan = 60.0
+
+// bridgeGap allows longer pauses inside a read than maxJoinGap does when
+// extending one. A pitch pauses — Easy Allies' has 20s of patron shout-outs
+// between "patreon.com slash easy allies" and "now come join us on Patreon" —
+// and the tighter gap split one 54s read into a 19s fragment. Safe because
+// bridging needs a confirmed member at BOTH ends and is capped by bridgeSpan.
+const bridgeGap = 25.0
+
+func adjacent(segs []Segment, i, j int) bool {
+	return segs[j].Start-segs[i].End <= maxJoinGap
+}
+
+func mini(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxi(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// window returns the text of every segment overlapping a span of signalWindow
+// seconds either side of segs[i].
+func window(segs []Segment, i int, radius float64) string {
+	a, b := segs[i].Start-radius, segs[i].End+radius
+	out := ""
+	for _, s := range segs {
+		if s.End > a && s.Start < b {
+			out += " " + s.Text
+		}
+	}
+	return out
+}
+
 // RulesRevision identifies the current detection rules. An episode records
 // the revision it was processed under, so improving the rules re-opens the
 // episodes that were scanned with the weaker ones.
@@ -226,7 +285,9 @@ type Options struct {
 //
 //	1 - sponsor scoring only
 //	2 - break hand-off detection (breaks.go), transcript-wide matching
-const RulesRevision = 2
+//	3 - signals matched in a window, not per segment
+//	4 - tightened "go to", "a month", merch and tier patterns
+const RulesRevision = 4
 
 func DefaultOptions() Options {
 	return Options{MinSpan: 8, MaxSpan: 180, MaxTotal: 300, MaxFraction: 0.15}
@@ -242,23 +303,57 @@ func FindAds(segs []Segment, total float64, o Options) []Span {
 	if len(segs) == 0 {
 		return nil
 	}
-	strong := make([]bool, len(segs))
-	for i, s := range segs {
-		strong[i] = matches(sponsorPatterns, s.Text) && matches(ctaPatterns, s.Text)
+	// Two separate questions, deliberately kept apart.
+	//
+	// "Is an ad read happening around here?" is answered from a WINDOW, because
+	// whisper's segmentation is arbitrary and varies hugely between shows —
+	// Easy Allies comes back in 2-6s fragments, which split
+	// "patreon.com slash easy allies" from "two days early and ad free" into
+	// different segments and left a 54s read looking like one 7s blip.
+	//
+	// "Is THIS segment part of it?" is answered from the segment's own text.
+	// Using the window for both made every show segment beside an ad look
+	// strong, because its window reached back into the ad: the VGC span grew
+	// from 13.5-35.8 to 0-41 and swallowed the episode intro.
+	context := make([]bool, len(segs))
+	own := make([]bool, len(segs))
+	for i := range segs {
+		w := window(segs, i, signalWindow)
+		context[i] = matches(sponsorPatterns, w) && matches(ctaPatterns, w)
+		own[i] = matches(sponsorPatterns, segs[i].Text) || matches(ctaPatterns, segs[i].Text)
 	}
-	// A neighbour of a strong segment counts if it carries either signal: ad
-	// reads run over several segments and the URL may land in only one.
 	member := make([]bool, len(segs))
 	for i := range segs {
-		if !strong[i] {
+		member[i] = context[i] && own[i]
+	}
+
+	// Bridge the quiet middle of a read. A pitch spends most of its length on
+	// sentences carrying no keyword at all ("you get into the official
+	// discord", "you get your name in the credits"), so without this a single
+	// read is reported as several sub-MinSpan fragments and discarded.
+	// Bounded, and never across a silence, so it cannot join two distant plugs
+	// through the show between them.
+	for i := 0; i < len(segs); i++ {
+		if !member[i] {
 			continue
 		}
-		member[i] = true
-		for _, j := range []int{i - 1, i + 1} {
-			if j >= 0 && j < len(segs) &&
-				(matches(sponsorPatterns, segs[j].Text) || matches(ctaPatterns, segs[j].Text)) {
-				member[j] = true
+		for j := i + 1; j < len(segs) && segs[j].Start-segs[i].End <= bridgeSpan; j++ {
+			if !member[j] {
+				continue
 			}
+			ok := true
+			for k := i; k < j; k++ {
+				if segs[k+1].Start-segs[k].End > bridgeGap {
+					ok = false
+					break
+				}
+			}
+			if ok {
+				for k := i; k <= j; k++ {
+					member[k] = true
+				}
+			}
+			break
 		}
 	}
 
@@ -268,7 +363,7 @@ func FindAds(segs []Segment, total float64, o Options) []Span {
 			continue
 		}
 		j := i
-		for j+1 < len(segs) && member[j+1] {
+		for j+1 < len(segs) && member[j+1] && adjacent(segs, j, j+1) {
 			j++
 		}
 		sp := Span{Start: segs[i].Start, End: segs[j].End}
