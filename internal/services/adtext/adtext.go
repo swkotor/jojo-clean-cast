@@ -300,7 +300,8 @@ func window(segs []Segment, i int, radius float64) string {
 //	3 - signals matched in a window, not per segment
 //	4 - tightened "go to", "a month", merch and tier patterns
 //	5 - brand-repetition reads (brand.go)
-const RulesRevision = 5
+//	6 - brand clusters grow both ways; foreign-language pre-roll
+const RulesRevision = 6
 
 func DefaultOptions() Options {
 	return Options{MinSpan: 8, MaxSpan: 180, MaxTotal: 300, MaxFraction: 0.15}

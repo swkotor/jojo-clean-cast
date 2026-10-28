@@ -350,6 +350,16 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 		return
 	}
 	spans := adtext.FindAds(segs, total, adtext.DefaultOptions())
+
+	// An inserted pre-roll in another language survives the differential pass
+	// when every download got the same creative. It is not a judgement call,
+	// so it is added to the cuts outright — see preroll.go.
+	if rel, err := filepath.Rel(config.AppConfig.Setup.AudioDir, file); err == nil &&
+		!strings.HasPrefix(rel, "..") {
+		if n := adtext.ForeignPreroll(rel, total); n > 0 {
+			spans = append([]adtext.Span{{Start: 0, End: n, Reason: "foreign-language pre-roll"}}, spans...)
+		}
+	}
 	// Mark done either way: a clean episode must not be transcribed again on
 	// every pass just because nothing was found.
 	database.MarkAdTextDone(ep.YoutubeVideoId, adtext.RulesRevision)

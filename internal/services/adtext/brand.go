@@ -130,11 +130,23 @@ func FindBrandReads(segs []Segment, total float64) []Span {
 		if best > brandWindow {
 			continue
 		}
-		// grow the cluster over every mention still inside the window
+		// Grow the cluster over every mention still inside the window, in BOTH
+		// directions. Growing only forward meant the cluster was the tightest
+		// four mentions plus whatever followed, so earlier mentions of the
+		// same ad fell outside it and counted against the concentration test:
+		// a six-mention Merchantech read scored 4/6 = 0.67 and was rejected as
+		// "a name used across the episode". It only showed with more than
+		// brandMinHits mentions, which is why a four-mention test passed.
 		first, last := idx[bi], idx[bj]
-		for _, k := range idx {
-			if k > last && segs[k].End-segs[first].Start <= brandWindow {
-				last = k
+		for changed := true; changed; {
+			changed = false
+			for _, k := range idx {
+				if k < first && segs[last].End-segs[k].Start <= brandWindow {
+					first, changed = k, true
+				}
+				if k > last && segs[k].End-segs[first].Start <= brandWindow {
+					last, changed = k, true
+				}
 			}
 		}
 		lo, hi := segs[first].Start, segs[last].End
@@ -148,6 +160,7 @@ func FindBrandReads(segs []Segment, total float64) []Span {
 			continue // the name is used across the episode: it is a topic
 		}
 		a, b := snap(segs, lo, hi)
+		a, b = widenRead(segs, a, b)
 		w := textIn(segs, a, b)
 		// The repeated name must also be the thing being linked to. Without
 		// this the detector fired on any subject discussed in a burst —
@@ -169,4 +182,51 @@ func FindBrandReads(segs []Segment, total float64) []Span {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Start < out[j].Start })
 	return mergeSpans(out)
+}
+
+// urlTail is the rest of an address spoken after the domain: the read ends
+// "...at merchant.tech" / "slash giant bomb", and the brand's last mention is
+// in the first half, so the span stopped mid-URL and left "Slash giant bomb."
+// hanging in the episode.
+var urlTail = regexp.MustCompile(`(?i)^\W*(slash|dot|forward slash)\b|^\W*[a-z]{2,10}\W*$`)
+
+// widenRead grows a confirmed read to its real edges.
+//
+// Without this the cut began at the brand's FIRST mention and ended at its
+// last, which on a Giant Bombcast episode left the setup ("I don't know
+// anything about spinning up a store") in front of it and "Slash giant bomb"
+// behind it — a mangled fragment, which is worse to listen to than the whole
+// ad. Both edges are extended only on evidence, never speculatively.
+func widenRead(segs []Segment, a, b float64) (float64, float64) {
+	// Forward: finish the address.
+	for n := 0; n < 2; n++ {
+		for i := range segs {
+			if segs[i].Start >= b && segs[i].Start-b <= 1.5 && urlTail.MatchString(segs[i].Text) {
+				b = segs[i].End
+				break
+			}
+		}
+	}
+	// Backward: everything between a break announcement and the ad IS the ad,
+	// and the announcement is for a break that will no longer be there.
+	for i := range segs {
+		if segs[i].End > a || a-segs[i].End > 25 {
+			continue
+		}
+		if matches(breakOpenPatterns, segs[i].Text) {
+			gap := a - segs[i].End
+			contiguous := true
+			for j := i; j < len(segs)-1 && segs[j].Start < a; j++ {
+				if segs[j+1].Start-segs[j].End > maxJoinGap {
+					contiguous = false
+					break
+				}
+			}
+			if contiguous && gap <= 25 {
+				a = segs[i].Start
+			}
+			break
+		}
+	}
+	return a, b
 }

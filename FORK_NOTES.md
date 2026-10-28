@@ -74,6 +74,13 @@ dashboard and automation features, deployed on Unraid as `jojo-podcasts`.
      everything else. The address check is what makes it safe: without it the
      detector fired on any subject discussed in a burst.
 
+   - *foreign-language pre-roll* (`preroll.go`): an inserted ad in another
+     language. The differential pass cannot see a slot that got the SAME
+     creative in all three downloads — a Bombcast episode shipped with 48s of
+     Dutch on the front at 99.5% frames shared. The show's own language is read
+     from the middle of the episode, so a genuinely Dutch podcast is unaffected.
+     Uses the sidecar's `/language` probe.
+
    Signals are matched in a 10s WINDOW (whisper's segmentation varies hugely —
    958 segments vs 313 for the same audio depending on the engine), but whether
    a segment BELONGS to a read is judged on its own text; using the window for
