@@ -188,7 +188,27 @@ func FindBrandReads(segs []Segment, total float64) []Span {
 // "...at merchant.tech" / "slash giant bomb", and the brand's last mention is
 // in the first half, so the span stopped mid-URL and left "Slash giant bomb."
 // hanging in the episode.
-var urlTail = regexp.MustCompile(`(?i)^\W*(slash|dot|forward slash)\b|^\W*[a-z]{2,10}\W*$`)
+var urlTail = regexp.MustCompile(`(?i)^\W*(slash|dot|forward slash)\b`)
+
+// danglingAddress reports whether a text stops in the middle of an address, so
+// the next words are still part of it.
+var danglingAddress = regexp.MustCompile(`(?i)(\.(com|co\.uk|net|org|io|tv|tech|co|shop|store|app|nyc|us|xyz|gg|fm)|\bslash|\bdot)\W*$`)
+
+// bareWord matches a segment holding nothing but one short word — the tail of
+// a spoken URL ("slash" / "Jeff"), but equally "All right." or "Exciting.", so
+// it is only trusted when the text before it is a dangling address. Accepting
+// it unconditionally pulled two segments of the show into every cut.
+var bareWord = regexp.MustCompile(`(?i)^\W*[a-z]{2,12}\W*$`)
+
+// continuesAddress reports whether segment nx carries on an address that the
+// text from a to b has left unfinished.
+func continuesAddress(segs []Segment, a, b float64, nx int) bool {
+	if urlTail.MatchString(segs[nx].Text) {
+		return true
+	}
+	return danglingAddress.MatchString(strings.TrimSpace(textIn(segs, a, b))) &&
+		bareWord.MatchString(segs[nx].Text)
+}
 
 // widenRead grows a confirmed read to its real edges.
 //
@@ -201,7 +221,7 @@ func widenRead(segs []Segment, a, b float64) (float64, float64) {
 	// Forward: finish the address.
 	for n := 0; n < 2; n++ {
 		for i := range segs {
-			if segs[i].Start >= b && segs[i].Start-b <= 1.5 && urlTail.MatchString(segs[i].Text) {
+			if segs[i].Start >= b && segs[i].Start-b <= 1.5 && continuesAddress(segs, a, b, i) {
 				b = segs[i].End
 				break
 			}

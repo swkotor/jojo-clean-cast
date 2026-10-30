@@ -223,7 +223,7 @@ func matches(pats []*regexp.Regexp, s string) bool {
 type Options struct {
 	MinSpan     float64 // ignore anything shorter than this
 	MaxSpan     float64 // a "span" longer than this is not an ad read
-	MaxTotal    float64 // never cut more than this in one episode
+	MaxTotal    float64 // floor for the per-episode cap; see maxTotalFor
 	MaxFraction float64 // ...nor more than this share of it
 }
 
@@ -301,7 +301,25 @@ func window(segs []Segment, i int, radius float64) string {
 //	4 - tightened "go to", "a month", merch and tier patterns
 //	5 - brand-repetition reads (brand.go)
 //	6 - brand clusters grow both ways; foreign-language pre-roll
-const RulesRevision = 6
+//	7 - direct-response reads (directresponse.go)
+//	8 - cuts within 15s of each other are joined
+const RulesRevision = 8
+
+// maxTotalFor caps how much one episode may lose.
+//
+// A flat 300s was set when the only ads being found were 20s self-promo blips.
+// It is wrong for a long show carrying real advertising: a 2h53m Jeff
+// Gerstmann episode has 348s of ads across three slots, and the flat cap made
+// the rules refuse all 303s they had correctly found — the safety net throwing
+// away the result instead of a bad one. The share of the episode is the
+// meaningful limit; the floor only protects short episodes.
+func maxTotalFor(total float64, o Options) float64 {
+	cap := o.MaxTotal
+	if scaled := 0.08 * total; scaled > cap {
+		cap = scaled
+	}
+	return cap
+}
 
 func DefaultOptions() Options {
 	return Options{MinSpan: 8, MaxSpan: 180, MaxTotal: 300, MaxFraction: 0.15}
@@ -397,6 +415,9 @@ func FindAds(segs []Segment, total float64, o Options) []Span {
 	// Ads performed as a bit carry none of the sponsor vocabulary; they are
 	// found by the advertiser's name being repeated — see brand.go.
 	spans = mergeSpans(append(spans, FindBrandReads(segs, total)...))
+	// Classic direct-response reads carry no sponsor noun and may not name the
+	// advertiser often enough for the brand rule — see directresponse.go.
+	spans = mergeSpans(append(spans, FindDirectResponseAds(segs, total)...))
 
 	// Final safety net: if the rules somehow select a big share of the episode
 	// they are wrong about something, and dropping the audio is worse than
@@ -405,14 +426,23 @@ func FindAds(segs []Segment, total float64, o Options) []Span {
 	for _, s := range spans {
 		sum += s.Seconds()
 	}
-	if sum > o.MaxTotal || (total > 0 && sum > o.MaxFraction*total) {
+	if sum > maxTotalFor(total, o) || (total > 0 && sum > o.MaxFraction*total) {
 		log.Warnf("[ADTEXT] refusing to cut %.0fs of a %.0fs episode — rules look wrong", sum, total)
 		return nil
 	}
 	return spans
 }
 
-// mergeSpans sorts spans and unions any that touch, so the two detectors
+// mergeGap is how close two cuts may be before the audio between them is
+// treated as part of the same ad.
+//
+// A Game Mess Mornings episode was cut at 26m52s-27m17s and 27m27s-28m25s,
+// leaving a six-second island of the ad's own setup ("I don't know anything
+// about spinning up a store") stranded between them. An island of show that
+// short between two ads does not happen, so joining is the safe reading.
+const mergeGap = 15.0
+
+// mergeSpans sorts spans and unions any that touch or very nearly touch, so the two detectors
 // cannot produce overlapping cuts (which would double-count the removed time
 // and make the log misleading).
 func mergeSpans(in []Span) []Span {
@@ -423,7 +453,7 @@ func mergeSpans(in []Span) []Span {
 	out := in[:1]
 	for _, sp := range in[1:] {
 		last := &out[len(out)-1]
-		if sp.Start <= last.End {
+		if sp.Start-last.End <= mergeGap {
 			if sp.End > last.End {
 				last.End = sp.End
 			}

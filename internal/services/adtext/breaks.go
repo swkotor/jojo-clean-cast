@@ -37,8 +37,9 @@ import (
 
 // entering a break
 var breakOpenPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\blet'?s (take|have) a (quick |short |little )?break\b`),
-	regexp.MustCompile(`(?i)\bwe'?(ll|re| are|'re gonna|'re going to|ll be) ?(gonna |going to )?(take|have) a (quick |short )?break\b`),
+	regexp.MustCompile(`(?i)\blet'?s (take|have) (a|one more|another|the last|our last|our final) (quick |short |little )?break\b`),
+	regexp.MustCompile(`(?i)\bwe'?(ll|re| are|'re gonna|'re going to|ll be) ?(gonna |going to )?(take|have) (a|one more|another) (quick |short )?break\b`),
+	regexp.MustCompile(`(?i)\b(our|the) (final|last) break\b`),
 	regexp.MustCompile(`(?i)\bskip (out on|past|over|out) (these|the|those) ?(ad|ads|ad messages|ad breaks|advertisements)\b`),
 	regexp.MustCompile(`(?i)\b(time|first) for (a|these|some) (quick )?(ad|ads|break|messages)\b`),
 	regexp.MustCompile(`(?i)\bback after (this|these|the break|a break)\b`),
