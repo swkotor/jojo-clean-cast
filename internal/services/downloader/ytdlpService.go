@@ -234,6 +234,20 @@ func runDownload(youtubeVideoId string, forceRedownload bool, done chan struct{}
 			file := database.FindFileWithId(config.AppConfig.Setup.AudioDir, youtubeVideoId)
 			if file != "" {
 				database.SetSkipBaseline(youtubeVideoId, VerifySponsorBlock(youtubeVideoId, title, file))
+				// Second pass, for ads the hosts read aloud. This was wired
+				// into the RSS path only, so for every YouTube-sourced podcast
+				// it ran nowhere except the one-episode-per-poll backlog — and
+				// an episode is usually served, and then cleaned up, long
+				// before its turn comes. The Jeff Gerstmann Show had its ads
+				// intact for exactly this reason, whatever the rules could or
+				// could not detect.
+				//
+				// Runs after SponsorBlock so it only ever sees what is left,
+				// and after promote so a failure still leaves a playable
+				// episode.
+				if ep, err := database.GetEpisodeByVideoId(youtubeVideoId); err == nil && ep != nil {
+					stripHostReadAds(ep, database.GetPodcast(ep.PodcastId), file)
+				}
 			} else {
 				database.SetSkipBaseline(youtubeVideoId, sponsorblock.TotalSponsorTimeSkipped(youtubeVideoId))
 			}
