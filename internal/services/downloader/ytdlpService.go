@@ -251,6 +251,7 @@ func runDownload(youtubeVideoId string, forceRedownload bool, done chan struct{}
 			} else {
 				database.SetSkipBaseline(youtubeVideoId, sponsorblock.TotalSponsorTimeSkipped(youtubeVideoId))
 			}
+			SyncStoredDuration(youtubeVideoId)
 			log.Infof("%s download completed successfully.", title)
 			ntfy.SendNotification(fmt.Sprintf("%s download success!", title), "Clean Cast - Success")
 		}

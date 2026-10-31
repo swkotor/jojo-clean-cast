@@ -279,6 +279,7 @@ func runRssDownload(ep *models.PodcastEpisode) {
 	// RSS audio has no SponsorBlock data; record a zero baseline so the drift
 	// check never mistakes "no segments" for "the segments changed".
 	database.SetSkipBaseline(ep.YoutubeVideoId, 0)
+	SyncStoredDuration(ep.YoutubeVideoId)
 	events.Info("Download finished: %s", title)
 }
 
@@ -366,6 +367,10 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 	if len(spans) == 0 {
 		log.Infof("[ADTEXT] %s: %s (transcribed %.0fs in %s)",
 			ep.YoutubeVideoId, adtext.Describe(spans), total, time.Since(started).Round(time.Second))
+		// Finding nothing is exactly when a miss is most likely, so the audit
+		// matters more here than on the paths that did cut something.
+		auditEpisode(ep, p, segs, nil)
+		saveCorpus(ep, p, segs, nil, total)
 		return
 	}
 
@@ -418,4 +423,64 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 		removed, ep.EpisodeName, adtext.Describe(spans))
 	log.Infof("[ADTEXT] %s: cut %.0fs in %d span(s) — %s", ep.YoutubeVideoId,
 		removed, len(spans), adtext.Describe(spans))
+	auditEpisode(ep, p, segs, spans)
+	saveCorpus(ep, p, segs, spans, total)
+}
+
+// saveCorpus keeps the transcript and the cuts so a future rules change can be
+// replayed against this real episode — see corpus.go for why.
+func saveCorpus(ep *models.PodcastEpisode, p *models.Podcast, segs []adtext.Segment, spans []adtext.Span, total float64) {
+	name := ""
+	if p != nil {
+		name = p.DisplayName()
+	}
+	rec := adtext.Record{
+		VideoID: ep.YoutubeVideoId, Podcast: name, Title: ep.EpisodeName,
+		Total: total, Rev: adtext.RulesRevision, Spans: spans, Segments: segs,
+	}
+	if err := adtext.SaveRecord(config.AppConfig.Setup.ConfigDir, rec); err != nil {
+		log.Warnf("[CORPUS] could not store %s: %v", ep.YoutubeVideoId, err)
+	}
+}
+
+// auditEpisode checks our own work and says so in the event log.
+//
+// Every "this show still has ads" so far was found by Joel listening, while
+// the evidence sat in a transcript the app had made and discarded. Reporting
+// it turns a listening complaint into a line in the log.
+func auditEpisode(ep *models.PodcastEpisode, p *models.Podcast, segs []adtext.Segment, spans []adtext.Span) {
+	var self []string
+	if p != nil {
+		if u, err := url.Parse(p.FeedUrl); err == nil && u.Host != "" {
+			self = append(self, strings.TrimPrefix(u.Host, "www."))
+		}
+		// the show's own name is usually its domain too ("giantbomb.com")
+		self = append(self, strings.ToLower(strings.NewReplacer(" ", "", "-", "", "'", "").Replace(p.DisplayName())))
+	}
+	left := adtext.AuditLeftovers(segs, spans, self)
+	if len(left) == 0 {
+		return
+	}
+	events.Error("Possible ads still in %s: %s", ep.EpisodeName, adtext.DescribeLeftovers(left))
+	log.Warnf("[AUDIT] %s: %s", ep.YoutubeVideoId, adtext.DescribeLeftovers(left))
+}
+
+// SyncStoredDuration sets the episode's stored length to the length of the file
+// now on disk.
+//
+// Every pass that cuts already updates it, but an episode where SponsorBlock
+// removed time and the text pass then found nothing kept the pre-cut figure,
+// so the feed advertised a length the audio did not have. Measuring the file
+// once at the end of the download covers every combination of passes without
+// each of them having to remember.
+func SyncStoredDuration(videoId string) {
+	file := database.FindFileWithId(config.AppConfig.Setup.AudioDir, videoId)
+	if file == "" {
+		return
+	}
+	d, err := adtext.ProbeDuration(file)
+	if err != nil || d <= 0 {
+		return
+	}
+	database.UpdateEpisodeDuration(videoId, int(d))
 }

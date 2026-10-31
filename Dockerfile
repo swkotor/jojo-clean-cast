@@ -6,6 +6,11 @@ COPY . /app
 WORKDIR /app/cmd/app
 RUN go mod download
 RUN CGO_ENABLED=0 go build -o main .
+# replay re-runs the ad rules over the stored corpus of real episodes and
+# reports what a rules change gained or lost. Shipped in the image so it can be
+# run against the live corpus without a toolchain on the server.
+WORKDIR /app/cmd/replay
+RUN CGO_ENABLED=0 go build -o replay .
 
 # Stage 1b: whisper.cpp, for finding HOST-READ ads.
 # Those are spoken by the hosts and baked into the master recording, so they are
@@ -26,6 +31,7 @@ FROM alpine
 
 WORKDIR /app
 COPY --from=builder /app/cmd/app/main .
+COPY --from=builder /app/cmd/replay/replay /usr/local/bin/replay
 # fork: nodejs is the JS runtime for yt-dlp's YouTube extractor. Without one,
 # yt-dlp uses a deprecated no-JS path and YouTube intermittently answers
 # 403 Forbidden ("No supported JavaScript runtime could be found").
