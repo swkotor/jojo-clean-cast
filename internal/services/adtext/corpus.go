@@ -26,14 +26,18 @@ import (
 
 // Record is one episode's transcript and what was cut from it.
 type Record struct {
-	VideoID  string    `json:"video_id"`
-	Podcast  string    `json:"podcast"`
-	Title    string    `json:"title"`
-	Total    float64   `json:"total"`
-	Rev      int       `json:"rules_revision"`
-	When     time.Time `json:"when"`
-	Spans    []Span    `json:"spans"`
-	Segments []Segment `json:"segments"`
+	VideoID string    `json:"video_id"`
+	Podcast string    `json:"podcast"`
+	Title   string    `json:"title"`
+	Total   float64   `json:"total"`
+	Rev     int       `json:"rules_revision"`
+	When    time.Time `json:"when"`
+	// The show's own names, stored with the record because the rules need them
+	// to tell a Patreon plug from an advertiser. Replaying without them gave
+	// different spans from the same input and reported a phantom change.
+	SelfHosts []string  `json:"self_hosts"`
+	Spans     []Span    `json:"spans"`
+	Segments  []Segment `json:"segments"`
 }
 
 // CorpusDir is where records live under the config directory.

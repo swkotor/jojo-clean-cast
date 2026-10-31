@@ -439,6 +439,7 @@ func saveCorpus(ep *models.PodcastEpisode, p *models.Podcast, segs []adtext.Segm
 	rec := adtext.Record{
 		VideoID: ep.YoutubeVideoId, Podcast: name, Title: ep.EpisodeName,
 		Total: total, Rev: adtext.RulesRevision, Spans: spans, Segments: segs,
+		SelfHosts: selfHostsFor(p),
 	}
 	if err := adtext.SaveRecord(config.AppConfig.Setup.ConfigDir, rec); err != nil {
 		log.Warnf("[CORPUS] could not store %s: %v", ep.YoutubeVideoId, err)

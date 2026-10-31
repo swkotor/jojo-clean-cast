@@ -50,7 +50,9 @@ func main() {
 	var findings []finding
 
 	for _, r := range recs {
-		now := adtext.FindAds(r.Segments, r.Total, adtext.DefaultOptions())
+		o := adtext.DefaultOptions()
+		o.SelfHosts = r.SelfHosts
+		now := adtext.FindAds(r.Segments, r.Total, o)
 		label := r.VideoID
 		if r.Title != "" {
 			label = fmt.Sprintf("%s (%.40s)", r.VideoID, r.Title)
