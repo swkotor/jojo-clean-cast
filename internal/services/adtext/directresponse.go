@@ -217,3 +217,64 @@ func FindDirectResponseAds(segs []Segment, total float64) []Span {
 	sort.Slice(out, func(i, j int) bool { return out[i].Start < out[j].Start })
 	return mergeSpans(out)
 }
+
+// attributionWindow is how far an advertiser's address may sit from the
+// sponsor attribution that introduces it.
+const attributionWindow = 150.0
+
+// FindAttributedAds returns reads introduced as a sponsor and signed off with
+// a third-party address.
+//
+// Brand-awareness copy has no offer in it at all — no price, no shipping, no
+// code — so the direct-response rule cannot see it, and the advertiser may be
+// named only two or three times, below the brand rule's threshold:
+//
+//	"You know what, this sounds like a great time to hear word from our
+//	 sponsor. ... Gaming today isn't one thing ... That's why Alienware
+//	 systems are built with the performance to handle all of it ... Be more
+//	 alien at alienware.com slash game your way."
+//
+// Two pieces of evidence, each weak alone and conclusive together: the hosts
+// said a sponsor was coming, and an address that is not theirs follows. This
+// pairing is what the leftover audit uses to report a miss, so detecting it
+// closes the loop — the audit found these two episodes.
+func FindAttributedAds(segs []Segment, total float64, selfHosts []string) []Span {
+	if len(segs) < 3 {
+		return nil
+	}
+	attribution := regexp.MustCompile(`(?i)\bword from our sponsors?\b|\bbrought to you by\b|\b(our|this episode's|today's) sponsor\b|\bthanks to our sponsor`)
+
+	var out []Span
+	for i := range segs {
+		if !attribution.MatchString(segs[i].Text) {
+			continue
+		}
+		if len(out) > 0 && segs[i].Start < out[len(out)-1].End {
+			continue
+		}
+		// Find the advertiser's sign-off after it.
+		end, found := 0.0, false
+		for j := i; j < len(segs) && segs[j].Start-segs[i].End <= attributionWindow; j++ {
+			pair := segs[j].Text
+			if j+1 < len(segs) && adjacent(segs, j, j+1) {
+				pair += " " + segs[j+1].Text
+			}
+			if matches(drDestination, pair) && hasThirdPartyHost(pair, selfHosts) {
+				end, found = segs[j].End, true
+			}
+		}
+		if !found {
+			continue
+		}
+		a, b := snap(segs, segs[i].Start, end)
+		a, b = widenRead(segs, a, b)
+		if d := b - a; d >= drMinSpan && d <= drMaxSpan {
+			reason := textIn(segs, a, a+8)
+			if len(reason) > 60 {
+				reason = reason[:60]
+			}
+			out = append(out, Span{Start: a, End: b, Reason: "attributed:" + reason})
+		}
+	}
+	return mergeSpans(out)
+}

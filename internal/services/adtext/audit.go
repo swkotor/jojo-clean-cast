@@ -49,7 +49,24 @@ type Leftover struct {
 
 // hostOf pulls the domain label out of a match so it can be checked against
 // the self-promo list.
-var hostRe = regexp.MustCompile(`(?i)\b([a-z0-9-]{3,}) ?(?:\.|dot )(?:com|co\.uk|net|org|io|tv|tech|co|shop|store|app|nyc|us|xyz|gg|fm)\b`)
+// Spoken addresses arrive with the words apart — "giant bomb.com slash join",
+// "kind of funny dot com" — so up to three preceding words are captured and
+// the spaces removed before comparison. Capturing one word gave the host as
+// "bomb", which matched nothing in the self-promo list, and the show's own
+// link was reported as a third-party ad on every Game Mess Mornings episode.
+var hostRe = regexp.MustCompile(`(?i)\b((?:[a-z0-9-]+[ ]){0,2}[a-z0-9-]{2,}) ?(?:\.|dot )(?:com|co\.uk|net|org|io|tv|tech|co|shop|store|app|nyc|us|xyz|gg|fm)\b`)
+
+// squash reduces a name to letters and digits so "giant bomb" and "giantbomb"
+// compare equal.
+func squash(s string) string {
+	var b strings.Builder
+	for _, c := range strings.ToLower(s) {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			b.WriteRune(c)
+		}
+	}
+	return b.String()
+}
 
 func isSelfPromo(text string) bool {
 	m := hostRe.FindStringSubmatch(text)
@@ -94,11 +111,17 @@ func AuditLeftovers(segs []Segment, cut []Span, extraSelf []string) []Leftover {
 		if inCut(s.Start) {
 			continue
 		}
-		// A spoken address straddles segments — "...at merchant.tech" then
-		// "Slash giant bomb" — so the evidence is looked for in a window, not
-		// in one segment. Checking segments alone missed the very ad this
-		// audit was written for.
-		w := window(segs, i, 10)
+		// A spoken address straddles exactly one boundary — "...at
+		// merchant.tech" then "Slash giant bomb" — so the evidence is this
+		// segment plus the next, and no more. A ±10s window instead swept in
+		// unrelated speech: on the real library it reported "Maybe I am one of
+		// the lucky few to enjoy God's sun" as a vanity address because a link
+		// happened to be spoken nearby, and the quoted text made the finding
+		// impossible to judge.
+		w := s.Text
+		if i+1 < len(segs) && adjacent(segs, i, i+1) {
+			w += " " + segs[i+1].Text
+		}
 		for _, p := range auditPatterns {
 			if !p.re.MatchString(w) {
 				continue
@@ -106,6 +129,7 @@ func AuditLeftovers(segs []Segment, cut []Span, extraSelf []string) []Leftover {
 			if p.name == "vanity address" && !hasThirdPartyHost(w, extraSelf) {
 				continue // only the show's own links are in there
 			}
+			// quote the pair we actually matched, so the log says why
 			report(s.Start, p.name, w)
 		}
 	}
@@ -138,16 +162,14 @@ func AuditLeftovers(segs []Segment, cut []Span, extraSelf []string) []Leftover {
 // would let the advertiser through.
 func hasThirdPartyHost(text string, extraSelf []string) bool {
 	for _, m := range hostRe.FindAllStringSubmatch(text, -1) {
-		host := strings.ToLower(m[1])
+		// The capture may include leading words that are not part of the name
+		// ("by going to giantbom"), so every suffix is tried. Comparing the
+		// whole phrase only, the show's own address came back as third-party
+		// whenever the sentence ran into it.
+		words := strings.Fields(m[1])
 		self := false
-		for _, h := range selfPromoHosts {
-			if host == h || strings.Contains(host, h) {
-				self = true
-				break
-			}
-		}
-		for _, h := range extraSelf {
-			if h != "" && strings.Contains(host, strings.ToLower(h)) {
+		for k := range words {
+			if isKnownSelf(squash(strings.Join(words[k:], "")), extraSelf) {
 				self = true
 				break
 			}
@@ -159,14 +181,21 @@ func hasThirdPartyHost(text string, extraSelf []string) bool {
 	return false
 }
 
-func matchesAnyHost(text string, hosts []string) bool {
-	m := hostRe.FindStringSubmatch(text)
-	if m == nil {
-		return false
+// isKnownSelf reports whether a host is one the show uses for itself. The
+// comparison runs both ways, because the show's name may be longer than the
+// host ("gamemessmorningsgiantbomb" contains "giantbomb") or shorter.
+func isKnownSelf(host string, extraSelf []string) bool {
+	for _, h := range selfPromoHosts {
+		if host == h || strings.Contains(host, h) {
+			return true
+		}
 	}
-	host := strings.ToLower(m[1])
-	for _, h := range hosts {
-		if h != "" && strings.Contains(host, strings.ToLower(h)) {
+	for _, h := range extraSelf {
+		hh := squash(h)
+		if len(hh) < 4 {
+			continue
+		}
+		if strings.Contains(host, hh) || strings.Contains(hh, host) {
 			return true
 		}
 	}

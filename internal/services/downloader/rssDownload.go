@@ -350,7 +350,9 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 		events.Error("Could not transcribe %s: %v", ep.EpisodeName, err)
 		return
 	}
-	spans := adtext.FindAds(segs, total, adtext.DefaultOptions())
+	opts := adtext.DefaultOptions()
+	opts.SelfHosts = selfHostsFor(p)
+	spans := adtext.FindAds(segs, total, opts)
 
 	// An inserted pre-roll in another language survives the differential pass
 	// when every download got the same creative. It is not a judgement call,
@@ -443,21 +445,32 @@ func saveCorpus(ep *models.PodcastEpisode, p *models.Podcast, segs []adtext.Segm
 	}
 }
 
+// selfHostsFor lists the names a show uses for its own links, so neither the
+// rules nor the audit mistake a Patreon plug for a third-party ad.
+func selfHostsFor(p *models.Podcast) []string {
+	if p == nil {
+		return nil
+	}
+	var out []string
+	if u, err := url.Parse(p.FeedUrl); err == nil && u.Host != "" {
+		out = append(out, strings.TrimPrefix(u.Host, "www."))
+	}
+	out = append(out, p.DisplayName())
+	// the title with the fork's own suffix removed, which is not part of the
+	// show's name ("Giant Bombcast - jojo")
+	if i := strings.LastIndex(strings.ToLower(p.DisplayName()), "-jojo"); i > 0 {
+		out = append(out, strings.TrimSpace(p.DisplayName()[:i]))
+	}
+	return out
+}
+
 // auditEpisode checks our own work and says so in the event log.
 //
 // Every "this show still has ads" so far was found by Joel listening, while
 // the evidence sat in a transcript the app had made and discarded. Reporting
 // it turns a listening complaint into a line in the log.
 func auditEpisode(ep *models.PodcastEpisode, p *models.Podcast, segs []adtext.Segment, spans []adtext.Span) {
-	var self []string
-	if p != nil {
-		if u, err := url.Parse(p.FeedUrl); err == nil && u.Host != "" {
-			self = append(self, strings.TrimPrefix(u.Host, "www."))
-		}
-		// the show's own name is usually its domain too ("giantbomb.com")
-		self = append(self, strings.ToLower(strings.NewReplacer(" ", "", "-", "", "'", "").Replace(p.DisplayName())))
-	}
-	left := adtext.AuditLeftovers(segs, spans, self)
+	left := adtext.AuditLeftovers(segs, spans, selfHostsFor(p))
 	if len(left) == 0 {
 		return
 	}

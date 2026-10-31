@@ -221,10 +221,11 @@ func matches(pats []*regexp.Regexp, s string) bool {
 
 // Options tunes how aggressive detection is.
 type Options struct {
-	MinSpan     float64 // ignore anything shorter than this
-	MaxSpan     float64 // a "span" longer than this is not an ad read
-	MaxTotal    float64 // floor for the per-episode cap; see maxTotalFor
-	MaxFraction float64 // ...nor more than this share of it
+	MinSpan     float64  // ignore anything shorter than this
+	MaxSpan     float64  // a "span" longer than this is not an ad read
+	MaxTotal    float64  // floor for the per-episode cap; see maxTotalFor
+	SelfHosts   []string // names the show uses for itself, which are not ads
+	MaxFraction float64  // ...nor more than this share of it
 }
 
 // signalWindow is how far either side of a segment the sponsor and
@@ -303,7 +304,8 @@ func window(segs []Segment, i int, radius float64) string {
 //	6 - brand clusters grow both ways; foreign-language pre-roll
 //	7 - direct-response reads (directresponse.go)
 //	8 - cuts within 15s of each other are joined
-const RulesRevision = 8
+//	9 - sponsor-attributed brand reads (FindAttributedAds)
+const RulesRevision = 9
 
 // maxTotalFor caps how much one episode may lose.
 //
@@ -418,6 +420,9 @@ func FindAds(segs []Segment, total float64, o Options) []Span {
 	// Classic direct-response reads carry no sponsor noun and may not name the
 	// advertiser often enough for the brand rule — see directresponse.go.
 	spans = mergeSpans(append(spans, FindDirectResponseAds(segs, total)...))
+	// Brand-awareness reads carry no offer at all; they are found by the
+	// sponsor attribution that introduces them — see FindAttributedAds.
+	spans = mergeSpans(append(spans, FindAttributedAds(segs, total, o.SelfHosts)...))
 
 	// Final safety net: if the rules somehow select a big share of the episode
 	// they are wrong about something, and dropping the audio is worse than
