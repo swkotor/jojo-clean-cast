@@ -128,6 +128,38 @@ func Download(videoId, episodeName string) {
 	}
 }
 
+// FailedVideoIds lists every video with a recorded failure. The caller decides
+// whether it still matters (for example, whether it is already downloaded).
+func FailedVideoIds() []string {
+	var ids []string
+	failures.Range(func(k, _ any) bool {
+		ids = append(ids, k.(string))
+		return true
+	})
+	return ids
+}
+
+// ClearFailure forgets a video's failure history so it is tried again at once.
+func ClearFailure(videoId string) {
+	failMu.Lock()
+	defer failMu.Unlock()
+	failures.Delete(videoId)
+}
+
+// DownloadQueue downloads the episodes one after another in the background.
+// One at a time keeps yt-dlp, the transcriber and the disk from being hit by
+// many large downloads at once.
+func DownloadQueue(eps []models.PodcastEpisode) {
+	if len(eps) == 0 {
+		return
+	}
+	go func() {
+		for _, ep := range eps {
+			Download(ep.YoutubeVideoId, ep.EpisodeName)
+		}
+	}()
+}
+
 // NoteFailure records a failed download attempt from outside this package
 // (the on-demand /media path) so retry backoff and the dashboard failure
 // badge apply to those failures too.

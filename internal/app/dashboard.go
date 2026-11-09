@@ -804,6 +804,95 @@ func registerDashboardRoutes(e *echo.Echo) {
 		return c.JSON(http.StatusAccepted, map[string]string{"status": "downloading"})
 	})
 
+	// Download every episode of a feed that is not on disk yet, newest 200,
+	// one at a time in the background.
+	e.POST("/api/podcasts/:id/download-all", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		p := database.GetPodcast(c.Param("id"))
+		if p == nil {
+			return echo.NewHTTPError(http.StatusNotFound, "Podcast not found")
+		}
+		sourceId, filter := p.Id, ""
+		var exclude []string
+		if p.IsVirtual() {
+			sourceId, filter, exclude = p.ParentId, p.TitleFilter, p.ExcludeTerms()
+		}
+		episodes, _, err := database.SearchEpisodes(sourceId, filter, exclude, "", 0, 200)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+		var todo []models.PodcastEpisode
+		for _, ep := range episodes {
+			if database.FileExistsWithId(audioDirAbs, ep.YoutubeVideoId) || autodl.IsDownloading(ep.YoutubeVideoId) {
+				continue
+			}
+			todo = append(todo, ep)
+		}
+		autodl.DownloadQueue(todo)
+		events.Info("Download all for %s: %d queued", p.DisplayName(), len(todo))
+		return c.JSON(http.StatusAccepted, map[string]int{"queued": len(todo)})
+	})
+
+	// Episodes whose last download attempt failed and that are still not on disk
+	e.GET("/api/failed", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+		podNames := map[string]string{}
+		out := []map[string]interface{}{}
+		for _, id := range autodl.FailedVideoIds() {
+			if database.FileExistsWithId(audioDirAbs, id) {
+				continue
+			}
+			ep, err := database.GetEpisodeByVideoId(id)
+			if err != nil || ep == nil {
+				continue
+			}
+			name, ok := podNames[ep.PodcastId]
+			if !ok {
+				if pod := database.GetPodcast(ep.PodcastId); pod != nil {
+					name = pod.DisplayName()
+				}
+				podNames[ep.PodcastId] = name
+			}
+			out = append(out, map[string]interface{}{
+				"videoId":     id,
+				"name":        ep.EpisodeName,
+				"podcastId":   ep.PodcastId,
+				"podcastName": name,
+				"attempts":    autodl.FailureCount(id),
+			})
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{"total": len(out), "episodes": out})
+	})
+
+	// Retry every failed episode now, ignoring its backoff
+	e.POST("/api/failed/retry", func(c echo.Context) error {
+		if err := checkAuthentication(c); err != nil {
+			return err
+		}
+		audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)
+		var todo []models.PodcastEpisode
+		for _, id := range autodl.FailedVideoIds() {
+			if database.FileExistsWithId(audioDirAbs, id) || autodl.IsDownloading(id) {
+				continue
+			}
+			ep, err := database.GetEpisodeByVideoId(id)
+			if err != nil || ep == nil {
+				continue
+			}
+			autodl.ClearFailure(id)
+			todo = append(todo, *ep)
+		}
+		autodl.DownloadQueue(todo)
+		events.Info("Retry all failed: %d queued", len(todo))
+		return c.JSON(http.StatusAccepted, map[string]int{"queued": len(todo)})
+	})
+
 	// Delete a downloaded episode audio file
 	e.DELETE("/api/episodes/:videoId/file", func(c echo.Context) error {
 		if err := checkAuthentication(c); err != nil {
