@@ -74,6 +74,34 @@ try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dar
   .nav-item .lbl { flex: 1; min-width: 0; }
   .nav-item .cnt { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
   .nav-item .cnt.warn { color: var(--red); font-weight: 700; }
+  .sidebar { overscroll-behavior: contain; }
+  /* channel / source tree (disclosure buttons) */
+  #navTree ul { list-style: none; }
+  #navTree ul ul { margin-left: 14px; padding-left: 6px; border-left: 1px solid var(--border); }
+  .tg, .pi {
+    display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; text-align: left; background: none; border: 1px solid transparent;
+    color: var(--muted); border-radius: 9px; padding: 7px 8px; font-size: 13.5px; font-weight: 600;
+  }
+  .tg:hover, .pi:hover { background: var(--card-hover); color: var(--text); }
+  .tg .caret, .pi .caret { transition: transform .15s; flex-shrink: 0; }
+  .tg[aria-expanded="true"] > .caret, .pi[aria-expanded="true"] > .caret { transform: rotate(90deg); }
+  .tg .nm, .pi .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tg .nm { color: var(--text); }
+  .pi { font-weight: 500; }
+  .pi[aria-current="true"], .pi-flat[aria-current="true"] { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .tg .av { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; background: var(--border); flex-shrink: 0; }
+  .tg .ic { flex-shrink: 0; }
+  .tcnt { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); flex-shrink: 0; }
+  .tfail { font-size: 11px; font-weight: 700; color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); border-radius: 10px; padding: 0 6px; flex-shrink: 0; }
+  .pi-flat { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; color: var(--muted); border-radius: 9px; padding: 6px 8px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pi-flat:hover { background: var(--card-hover); color: var(--text); }
+  .pi-static { padding: 6px 8px; font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; }
+  .pdet { margin: 2px 0 6px 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
+  .pdet b { color: var(--text); font-weight: 650; }
+  .pdet .st { display: flex; gap: 4px 10px; flex-wrap: wrap; }
+  .pdet .ok { color: var(--green); } .pdet .busy { color: var(--amber); } .pdet .bad { color: var(--red); }
+  .pdet .pa { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .tree-empty { font-size: 12.5px; color: var(--muted); padding: 4px 10px; }
   .sb-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
   #navBackdrop { display: none; }
   @media (max-width: 899px) {
@@ -352,6 +380,7 @@ try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dar
     <div class="nav-sec">Manage</div>
     <button class="nav-item" data-nav="add" onclick="navTo('add')"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="lbl">Add / Browse</span></button>
   </nav>
+  <nav id="navTree" aria-label="Channels and sources"></nav>
   <div class="sb-foot">
     <a id="remoteLink" class="nav-item" href="#" target="_blank" rel="noopener" style="display:none"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg><span class="lbl">Remote dashboard</span></a>
     <a id="opmlLink" class="nav-item" href="/opml" download><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="lbl">Export OPML</span></a>
@@ -678,6 +707,7 @@ async function load() {
   }
 }
 
+function feedLink(p) { return publicUrl ? publicUrl + p.feedPath + remoteTok : location.origin + p.feedPath + tok; }
 function renderCard(p, pods) {
   const feedUrl = location.origin + p.feedPath + tok;
   const isVirtual = p.type === 'FILTER';
@@ -728,7 +758,7 @@ function renderCard(p, pods) {
     <div class="actions">
       <a class="btn apple" href="podcast://${esc(location.host)}${esc(p.feedPath)}${esc(tok)}">${publicUrl ? 'Subscribe (local)' : 'Subscribe in Apple Podcasts'}</a>
       ${publicUrl ? `<a class="btn remote" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${esc(p.feedPath)}${esc(remoteTok)}">Subscribe (remote)</a>` : ''}
-      <button class="btn" onclick="copyFeed(${jsq(publicUrl ? publicUrl + p.feedPath + remoteTok : feedUrl)}, this)">Copy RSS URL</button>
+      <button class="btn" onclick="copyFeed(${jsq(feedLink(p))}, this)">Copy RSS URL</button>
       <button class="btn" title="Queue every episode of this feed that is not downloaded yet (max 200, one at a time)" onclick="downloadAllEpisodes(${jsq(p.id)}, ${jsq(p.name)}, ${Number(p.episodeCount) || 0})">${I('download')} Download all</button>
       <button class="btn ${p.autoDownload ? 'autodl-on' : 'autodl-off'}" aria-pressed="${!!p.autoDownload}" title="Toggle automatic download of new episodes" onclick="toggleAutoDl(${jsq(p.id)}, ${!!p.autoDownload})">Auto-download: ${p.autoDownload ? 'on' : 'off'}</button>
       <button class="btn del" title="Remove subscription" aria-label="Remove ${esc(p.name)}" onclick="removePodcast(${jsq(p.id)}, ${jsq(p.name)})">${I('trash')}</button>
@@ -745,6 +775,7 @@ function renderPods() {
   renderTiles();
   renderFilters();
   paintNav();
+  renderTree();
   const all = window._pods;
   if (!all) return;
   if (!all.length) {
@@ -1152,6 +1183,7 @@ function paintNav() {
   set('sub', pods ? pods.filter(p => p.subscribed).length : '');
   set('unsub', pods ? pods.filter(p => !p.subscribed).length : '');
   set('failed', failedData && failedData.total ? failedData.total : '');
+  updateTreeActive();
   const t = VIEW_TEXT[cur];
   document.getElementById('viewTitle').textContent = t[0];
   document.getElementById('viewSub').textContent = t[1];
@@ -1175,6 +1207,146 @@ function navTo(k) {
   window.scrollTo(0, 0);
   if (k === 'add') document.getElementById('input').focus();
 }
+
+/* ---- sidebar tree: channels and sources (disclosure buttons) ---- */
+let navOpen = new Set();
+try { navOpen = new Set(JSON.parse(lsGet('jojoNavOpen') || '[]')); } catch (e) {}
+function saveNavOpen() { lsSet('jojoNavOpen', JSON.stringify([...navOpen])); }
+function podActive(p) {
+  if (view !== 'pods') return false;
+  const el = document.getElementById('search');
+  const q = el ? el.value.trim().toLowerCase() : '';
+  return !!q && q === String(p.name).toLowerCase();
+}
+function chanKeyOf(p, all) {
+  const par = p.parentId ? all.find(x => x.id === p.parentId) : null;
+  return (par ? par.channelId : p.channelId) || '';
+}
+function treePodItem(p, all, kids) {
+  const c = epCounts(p);
+  const key = 'p:' + p.id;
+  const open = navOpen.has(key);
+  const label = p.name + ', ' + (Number(p.episodeCount) || 0) + ' episodes' + (c.fail ? ', ' + c.fail + ' failed' : '');
+  const did = 'pd' + treeSeq++;
+  const eps = (p.episodes || []).length;
+  const detail = open ? `<div class="pdet" id="${did}">
+      <div><b>${esc(Number(p.episodeCount) || 0)}</b> episodes${p.type === 'FILTER' ? ' (filtered sub-feed)' : ''}</div>
+      <div class="st" title="Counts cover the ${esc(eps)} most recent tracked episodes, not the whole feed">
+        <span>Latest ${esc(eps)}:</span><span class="ok">${c.dl} downloaded</span>${c.dling ? `<span class="busy">${c.dling} downloading</span>` : ''}<span>${c.nd} pending</span><span class="${c.fail ? 'bad' : ''}">${c.fail} failed</span>
+      </div>
+      <div>${p.subscribed ? 'Subscribed' : 'Not subscribed'} &middot; Auto-download ${p.autoDownload ? 'on' : 'off'} &middot; Host ads ${p.adTextStrip ? 'cut' : 'kept'}</div>
+      <div class="pa">
+        <button class="btn sm" data-act="open" data-id="${esc(p.id)}">Open</button>
+        <button class="btn sm" data-act="dl" data-id="${esc(p.id)}">${I('download')} Download all</button>
+        <button class="btn sm" data-act="copy" data-id="${esc(p.id)}">Copy feed link</button>
+      </div>
+    </div>` : '';
+  const sub = kids && kids.length ? `<ul>${kids.map(k => treePodItem(k, all, null)).join('')}</ul>` : '';
+  return `<li><button class="pi" data-key="${esc(key)}" data-pid="${esc(p.id)}" aria-expanded="${open}"${open ? ` aria-controls="${did}"` : ''} aria-label="${esc(label)}" title="${esc(p.name)}"${podActive(p) ? ' aria-current="true"' : ''}>
+      <span class="caret">${I('chev')}</span><span class="nm">${esc(p.name)}</span>${c.fail ? `<span class="tfail" aria-hidden="true">${c.fail}</span>` : ''}</button>${detail}${sub}</li>`;
+}
+function treeGroup(key, headInner, label, count, fail, bodyHtml) {
+  const open = navOpen.has(key);
+  const gid = 'tg' + treeSeq++;
+  return `<li><button class="tg" data-key="${esc(key)}" aria-expanded="${open}" aria-controls="${gid}" aria-label="${esc(label)}" title="${esc(label)}">
+      <span class="caret">${I('chev')}</span>${headInner}<span class="tcnt" aria-hidden="true">${count}</span>${fail ? `<span class="tfail" aria-hidden="true">${fail}</span>` : ''}</button>
+      <ul id="${gid}"${open ? '' : ' hidden'}>${bodyHtml}</ul></li>`;
+}
+let treeSeq = 0;
+function renderTree() {
+  const box = document.getElementById('navTree');
+  const all = window._pods;
+  if (!all || !all.length) { box.innerHTML = all ? '' : ''; return; }
+  treeSeq = 0;
+  const tops = all.filter(p => !p.parentId || !all.some(x => x.id === p.parentId));
+  const kidsOf = id => all.filter(p => p.parentId === id);
+  const failOf = list => list.reduce((n, p) => n + epCounts(p).fail, 0);
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  // channels
+  const byChan = new Map();
+  for (const p of tops) {
+    const k = chanKeyOf(p, all) || '__none__';
+    if (!byChan.has(k)) byChan.set(k, []);
+    byChan.get(k).push(p);
+  }
+  const chans = [...byChan.entries()].sort((a, b) => {
+    if (a[0] === '__none__') return 1; if (b[0] === '__none__') return -1;
+    return (a[1][0].channelTitle || '').localeCompare(b[1][0].channelTitle || '');
+  });
+  const chanHtml = chans.map(([k, list]) => {
+    const total = list.reduce((n, p) => n + 1 + kidsOf(p.id).length, 0);
+    const fail = list.reduce((n, p) => n + failOf([p].concat(kidsOf(p.id))), 0);
+    const first = list.find(p => p.channelTitle) || list[0];
+    const name = k === '__none__' ? 'Playlists and other' : (first.channelTitle || 'Channel');
+    const av = k !== '__none__' && first.channelThumb ? `<img class="av" alt="" src="${esc(first.channelThumb)}" loading="lazy" onerror="this.style.display='none'">` : `<span class="ic">${I('play')}</span>`;
+    const label = name + ', ' + plural(total, 'podcast') + (fail ? ', ' + fail + ' failed' : '');
+    return treeGroup('g:' + k, av + `<span class="nm">${esc(name)}</span>`, label, total, fail,
+      list.map(p => treePodItem(p, all, kidsOf(p.id))).join(''));
+  }).join('');
+  // sources
+  const isRss = p => p.source === 'rss' || p.type === 'RSS';
+  const rss = all.filter(p => !p.parentId && isRss(p));
+  const pls = all.filter(p => !p.parentId && !isRss(p));
+  const filt = all.filter(p => p.parentId);
+  const flat = list => list.map(p => `<li><button class="pi-flat" data-act="open" data-id="${esc(p.id)}" title="${esc(p.name)}"${podActive(p) ? ' aria-current="true"' : ''}>${esc(p.name)}</button></li>`).join('');
+  const srcGroup = (key, name, list) => list.length ? treeGroup(key, `<span class="ic">${I('link')}</span><span class="nm">${name}</span>`,
+    name + ', ' + plural(list.length, 'feed') + (failOf(list) ? ', ' + failOf(list) + ' failed' : ''), list.length, failOf(list), flat(list)) : '';
+  const srcHtml = srcGroup('s:rss', 'RSS feeds', rss) + srcGroup('s:pl', 'Playlist feeds', pls) +
+    (filt.length ? `<li><div class="pi-static">${I('split')}<span>Filtered sub-feeds: ${filt.length} (nested under their parent above)</span></div></li>` : '');
+  const keep = document.activeElement && box.contains(document.activeElement) ? document.activeElement.dataset.key || document.activeElement.dataset.id : null;
+  const keepAct = keep && document.activeElement.dataset.act;
+  box.innerHTML = `<div class="nav-sec">Channels</div><ul>${chanHtml}</ul><div class="nav-sec">Sources</div><ul>${srcHtml}</ul>`;
+  if (keep) {
+    const el = [...box.querySelectorAll('button')].find(b => (keepAct ? b.dataset.act === keepAct && b.dataset.id === keep : b.dataset.key === keep));
+    if (el) el.focus();
+  }
+}
+function updateTreeActive() {
+  const all = window._pods || [];
+  document.querySelectorAll('#navTree [data-pid], #navTree .pi-flat').forEach(b => {
+    const p = all.find(x => x.id === (b.dataset.pid || b.dataset.id));
+    if (p && podActive(p)) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+  });
+}
+function navOpenPod(id) {
+  const all = window._pods || [];
+  const p = all.find(x => x.id === id);
+  if (!p) return;
+  navOpen.add('g:' + (chanKeyOf(p, all) || '__none__'));
+  navOpen.add('p:' + (p.parentId || p.id));
+  saveNavOpen();
+  closeDrawer(false);
+  goPodcast(p.name);
+}
+(function () {
+  const box = document.getElementById('navTree');
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !box.contains(b)) return;
+    const all = window._pods || [];
+    if (b.dataset.act) {
+      const p = all.find(x => x.id === b.dataset.id);
+      if (!p) return;
+      if (b.dataset.act === 'open') navOpenPod(p.id);
+      else if (b.dataset.act === 'dl') downloadAllEpisodes(p.id, p.name, Number(p.episodeCount) || 0);
+      else if (b.dataset.act === 'copy') copyFeed(feedLink(p), b);
+      return;
+    }
+    const k = b.dataset.key;
+    if (!k) return;
+    if (navOpen.has(k)) navOpen.delete(k); else navOpen.add(k);
+    saveNavOpen();
+    renderTree();
+  });
+  box.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const f = [...box.querySelectorAll('button')].filter(el => el.offsetParent !== null);
+    const i = f.indexOf(document.activeElement);
+    if (i < 0) return;
+    const n = f[i + (e.key === 'ArrowDown' ? 1 : -1)];
+    if (n) { e.preventDefault(); n.focus(); }
+  });
+})();
 
 /* drawer (phone) */
 const drawerMQ = window.matchMedia('(max-width: 899px)');
