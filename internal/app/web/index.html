@@ -51,14 +51,55 @@ try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dar
   .wrap { max-width: 1480px; margin: 0 auto; padding: 0 16px; }
   @media (min-width: 700px) { .wrap { padding: 0 32px; } }
 
+  /* app shell: sidebar + content */
+  .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
+  .content { min-width: 0; }
+  .sidebar {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--bg2); border-right: 1px solid var(--border);
+    padding: 18px 12px 14px; display: flex; flex-direction: column; gap: 2px; z-index: 60;
+  }
+  .sb-top { display: flex; align-items: center; gap: 10px; padding: 0 6px 14px; }
+  .sb-top .logo { width: 38px; height: 38px; border-radius: 11px; }
+  .sb-top .logo svg { width: 20px; height: 20px; }
+  .brand { font-weight: 750; font-size: 17px; letter-spacing: -.01em; flex: 1; min-width: 0; }
+  #navClose, #menuBtn { display: none; }
+  .nav-sec { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 14px 10px 4px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; text-decoration: none;
+    background: none; border: 1px solid transparent; color: var(--muted); border-radius: 10px; padding: 9px 10px; font-size: 14px; font-weight: 600;
+  }
+  .nav-item:hover { background: var(--card-hover); color: var(--text); }
+  .nav-item[aria-current="page"] { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .nav-item[aria-current="page"] svg { color: var(--accent); }
+  .nav-item .lbl { flex: 1; min-width: 0; }
+  .nav-item .cnt { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .nav-item .cnt.warn { color: var(--red); font-weight: 700; }
+  .sb-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+  #navBackdrop { display: none; }
+  @media (max-width: 899px) {
+    .app { display: block; }
+    .sidebar {
+      position: fixed; top: 0; bottom: 0; left: 0; height: auto; width: min(300px, 86vw); transform: translateX(-102%); visibility: hidden;
+      transition: transform .2s ease, visibility 0s linear .2s; box-shadow: var(--shadow);
+    }
+    .sidebar.open { transform: none; visibility: visible; transition: transform .2s ease, visibility 0s; }
+    #navBackdrop.open { display: block; position: fixed; inset: 0; background: var(--overlay); z-index: 55; }
+    #navClose, #menuBtn { display: inline-flex; }
+    body.drawer-open { overflow: hidden; }
+  }
+  .view-intro { color: var(--muted); font-size: 13.5px; margin: 6px 0 12px; }
+
   /* header */
-  header { padding: 24px 0 8px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  header .logo {
+  header { padding: 20px 0 8px; display: flex; align-items: center; gap: 12px; }
+  .hd-text { min-width: 0; flex: 1; }
+  .head-actions { flex-wrap: nowrap !important; flex-shrink: 0; }
+  @media (max-width: 699px) { .controls .spacer { display: none; } }
+  .logo {
     width: 46px; height: 46px; border-radius: 13px; color: #fff; flex-shrink: 0;
     background: linear-gradient(135deg, #7c3aed, #ec4899); display: flex; align-items: center; justify-content: center;
     box-shadow: 0 6px 18px rgba(124,58,237,.35);
   }
-  header .logo svg { width: 24px; height: 24px; }
+  .logo svg { width: 24px; height: 24px; }
   header h1 { font-size: 22px; font-weight: 750; letter-spacing: -.01em; }
   header .sub { color: var(--muted); font-size: 13px; margin-top: 1px; }
   .head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -78,8 +119,9 @@ try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dar
   .btn.sm { padding: 5px 10px; font-size: 12px; }
 
   /* summary tiles */
-  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 16px 0 4px; }
-  @media (min-width: 700px) { .tiles { grid-template-columns: repeat(5, 1fr); } }
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 8px 0 4px; }
+  .tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  @media (min-width: 700px) { .tiles { grid-template-columns: repeat(5, 1fr); } .tiles > :last-child:nth-child(odd) { grid-column: auto; } }
   .tile { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; text-align: left; }
   button.tile:hover { background: var(--card-hover); }
   .tile .v { font-size: 22px; font-weight: 750; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
@@ -107,7 +149,9 @@ try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dar
   .add-bar input:focus { border-color: var(--accent); }
   .add-bar .btn { padding: 12px 18px; font-size: 14px; }
   .hint { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
-  #status { font-size: 13px; min-height: 20px; padding: 2px 0; }
+  #status { font-size: 13px; padding: 2px 0; }
+  #status:empty { display: none; }
+  [hidden] { display: none !important; }
   #status.ok { color: var(--green); }
   #status.err { color: var(--red); }
 
@@ -129,13 +173,10 @@ try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dar
   .err-count { color: var(--red); font-weight: 700; }
 
   /* log */
-  #logPanel {
-    margin: 8px 0 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; display: none; overflow: hidden;
-  }
-  #logPanel.open { display: block; }
+  #logPanel { margin: 8px 0 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   .log-bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
   .log-bar .grow { flex: 1; }
-  #logList { max-height: 280px; overflow-y: auto; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+  #logList { max-height: 65vh; overflow-y: auto; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
   .log-line { display: flex; gap: 10px; padding: 5px 14px; border-bottom: 1px solid var(--border-soft); }
   .log-line .t { color: var(--muted); flex-shrink: 0; }
   .log-line .m { min-width: 0; overflow-wrap: anywhere; }
@@ -243,6 +284,20 @@ try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dar
   .empty p { font-size: 14px; max-width: 520px; margin: 0 auto 14px; }
   .empty.err h2 { color: var(--red); }
 
+  /* failed downloads view */
+  .fv-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .fv-bar .grow { flex: 1 1 200px; font-size: 14px; }
+  .fail-list { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .fail-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-top: 1px solid var(--border-soft); flex-wrap: wrap; }
+  .fail-row:first-child { border-top: none; }
+  .fail-row .st { color: var(--red); display: inline-flex; }
+  .fail-row .txt { flex: 1 1 240px; min-width: 0; }
+  .fail-row .nm { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+  .fail-row .sub2 { font-size: 12.5px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+  .fail-row .sub2 .link-btn { padding: 0; font-size: 12.5px; text-decoration: underline; }
+  .fail-row .att { font-size: 12px; color: var(--red); font-weight: 650; white-space: nowrap; }
+  .fail-row .ep-btn { width: auto; padding: 5px 12px; }
+
   /* modal */
   #modalWrap { display: none; position: fixed; inset: 0; background: var(--overlay); z-index: 50; align-items: flex-start; justify-content: center; padding: 6vh 16px; }
   #modalWrap.open { display: flex; }
@@ -278,60 +333,93 @@ try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dar
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="app">
+<div id="navBackdrop" onclick="closeDrawer()"></div>
+<aside class="sidebar" id="sidebar" aria-label="Sidebar">
+  <div class="sb-top">
+    <div class="logo" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg></div>
+    <div class="brand">jojo-podcasts</div>
+    <button class="btn icon ghost" id="navClose" onclick="closeDrawer()" aria-label="Close menu"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <nav aria-label="Main navigation">
+    <div class="nav-sec">Library</div>
+    <button class="nav-item" data-nav="all" onclick="navTo('all')"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg><span class="lbl">All podcasts</span><span class="cnt" data-count="all"></span></button>
+    <button class="nav-item" data-nav="sub" onclick="navTo('sub')"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span class="lbl">Subscribed</span><span class="cnt" data-count="sub"></span></button>
+    <button class="nav-item" data-nav="unsub" onclick="navTo('unsub')"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg><span class="lbl">Not subscribed</span><span class="cnt" data-count="unsub"></span></button>
+    <div class="nav-sec">Activity</div>
+    <button class="nav-item" data-nav="failed" onclick="navTo('failed')"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.01"/></svg><span class="lbl">Failed downloads</span><span class="cnt warn" data-count="failed"></span></button>
+    <button class="nav-item" data-nav="log" onclick="navTo('log')"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span class="lbl">Activity log</span><span class="cnt warn" id="errCount" data-count="log"></span></button>
+    <div class="nav-sec">Manage</div>
+    <button class="nav-item" data-nav="add" onclick="navTo('add')"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="lbl">Add / Browse</span></button>
+  </nav>
+  <div class="sb-foot">
+    <a id="remoteLink" class="nav-item" href="#" target="_blank" rel="noopener" style="display:none"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg><span class="lbl">Remote dashboard</span></a>
+    <a id="opmlLink" class="nav-item" href="/opml" download><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="lbl">Export OPML</span></a>
+  </div>
+</aside>
+
+<div class="content"><div class="wrap">
 <header>
-  <div class="logo" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg></div>
-  <div>
-    <h1>jojo-podcasts</h1>
-    <div class="sub">YouTube and RSS to clean podcast feeds, sponsor-free</div>
+  <button class="btn icon" id="menuBtn" onclick="openDrawer()" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <div class="hd-text">
+    <h1 id="viewTitle">All podcasts</h1>
+    <div class="sub" id="viewSub">YouTube and RSS to clean podcast feeds, sponsor-free</div>
   </div>
   <div class="head-actions">
-    <a id="remoteLink" class="btn" href="#" target="_blank" rel="noopener" style="display:none">Remote dashboard <svg class="i" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
-    <a id="opmlLink" class="btn" href="/opml" download>Export OPML</a>
+    <button class="btn" onclick="loadAll()" title="Reload everything from the server">Refresh</button>
     <button class="btn icon" id="themeBtn" onclick="toggleTheme()" aria-label="Switch colour theme" title="Switch colour theme"></button>
   </div>
 </header>
 
-<section class="tiles" id="tiles" aria-label="Library summary"></section>
-<div class="alert" id="failAlert" role="status"></div>
-
-<form class="add-bar" onsubmit="addPodcast();return false">
-  <div class="field">
-    <label class="sr-only" for="input">YouTube playlist, channel or handle to add</label>
-    <input id="input" autocomplete="off" placeholder="Paste a YouTube playlist or channel URL, an ID (PL.. / UC..) or an @handle">
-  </div>
-  <button type="submit" class="btn primary" id="addBtn">Add podcast</button>
-  <button type="button" class="btn" title="List a channel's podcasts and playlists so you can subscribe individually or in bulk" onclick="browsePlaylists(document.getElementById('input').value.trim())">Browse channel</button>
-</form>
-<div class="hint">Tip: a channel URL ending in /playlists opens the browser. RSS sources are attached per podcast with its Source button.</div>
 <div id="status" role="status" aria-live="polite"></div>
 
-<div class="controls">
-  <div class="search">
-    <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <label class="sr-only" for="search">Filter podcasts</label>
-    <input id="search" type="search" autocomplete="off" placeholder="Filter podcasts by name or channel" oninput="onSearch()">
+<main id="main">
+<section id="viewPods" aria-label="Podcasts">
+  <section class="tiles" id="tiles" aria-label="Library summary"></section>
+  <div class="alert" id="failAlert" role="status"></div>
+  <div class="controls">
+    <div class="search">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <label class="sr-only" for="search">Filter podcasts</label>
+      <input id="search" type="search" autocomplete="off" placeholder="Filter podcasts by name or channel" oninput="onSearch()">
+    </div>
+    <div class="seg" id="filters" role="group" aria-label="Filter"></div>
+    <div class="spacer"></div>
+    <div class="seg" role="group" aria-label="Group by">
+      <button class="pill" id="gmChannel" aria-pressed="true" onclick="setGroupMode('channel')">By channel</button>
+      <button class="pill" id="gmSub" aria-pressed="false" onclick="setGroupMode('sub')">By subscription</button>
+    </div>
+    <button class="btn sm ghost" onclick="setAllChannels(true)">Collapse all</button>
+    <button class="btn sm ghost" onclick="setAllChannels(false)">Expand all</button>
   </div>
-  <div class="seg" id="filters" role="group" aria-label="Filter"></div>
-  <div class="spacer"></div>
-  <div class="seg" role="group" aria-label="Group by">
-    <button class="pill" id="gmChannel" aria-pressed="true" onclick="setGroupMode('channel')">By channel</button>
-    <button class="pill" id="gmSub" aria-pressed="false" onclick="setGroupMode('sub')">By subscription</button>
-  </div>
-  <button class="btn sm ghost" onclick="setAllChannels(true)">Collapse all</button>
-  <button class="btn sm ghost" onclick="setAllChannels(false)">Expand all</button>
-  <button class="btn sm" id="logToggle" aria-expanded="false" aria-controls="logPanel" onclick="toggleLog()">Activity log <span id="errCount" class="err-count"></span></button>
-  <button class="btn sm" onclick="loadAll()">Refresh</button>
-</div>
-<div id="logPanel">
-  <div class="log-bar">
-    <span class="grow" id="logInfo"></span>
-    <button class="pill" id="logErrOnly" aria-pressed="false" onclick="toggleLogErrors()">Errors only</button>
-  </div>
-  <div id="logList"></div>
-</div>
+  <div id="grid"><div class="empty"><p>Loading podcasts...</p></div></div>
+</section>
 
-<main id="grid"><div class="empty"><p>Loading podcasts...</p></div></main>
+<section id="viewAdd" hidden aria-label="Add or browse">
+  <form class="add-bar" onsubmit="addPodcast();return false">
+    <div class="field">
+      <label class="sr-only" for="input">YouTube playlist, channel or handle to add</label>
+      <input id="input" autocomplete="off" placeholder="Paste a YouTube playlist or channel URL, an ID (PL.. / UC..) or an @handle">
+    </div>
+    <button type="submit" class="btn primary" id="addBtn">Add podcast</button>
+    <button type="button" class="btn" title="List a channel's podcasts and playlists so you can subscribe individually or in bulk" onclick="browsePlaylists(document.getElementById('input').value.trim())">Browse channel</button>
+  </form>
+  <div class="hint">Tip: a channel URL ending in /playlists opens the browser. RSS sources are attached per podcast with its Source button.</div>
+</section>
+
+<section id="viewFailed" hidden aria-label="Failed downloads"><div id="failedBody"></div></section>
+
+<section id="viewLog" hidden aria-label="Activity log">
+  <div id="logPanel">
+    <div class="log-bar">
+      <span class="grow" id="logInfo"></span>
+      <button class="pill" id="logErrOnly" aria-pressed="false" onclick="toggleLogErrors()">Errors only</button>
+    </div>
+    <div id="logList"></div>
+  </div>
+</section>
+</main>
+</div></div>
 </div>
 
 <input type="file" id="coverFile" accept=".jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadCover(this)">
@@ -364,6 +452,9 @@ let activeFilter = 'all';    // all | sub | unsub | fail | manual
 let logErrorsOnly = false;
 let lastEvents = [];
 let stats = null;
+let view = 'pods';          // pods | add | failed | log
+let failedData = null;      // {total, episodes} from /api/failed
+let failedErr = '';
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 try { collapsed = new Set(JSON.parse(lsGet('jojoCollapsed') || '[]')); } catch (e) {}
@@ -385,7 +476,9 @@ const ICON = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/>',
   link: '<path d="M7 17 17 7M8 7h9v9"/>',
-  alert: '<path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.01"/>'
+  alert: '<path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.01"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  retry: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>'
 };
 function I(name) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + (ICON[name] || '') + '</svg>'; }
 
@@ -514,25 +607,25 @@ function renderTiles() {
   const tile = (v, l, cls, filter) => {
     const inner = `<div class="v">${v}</div><div class="l">${l}</div>`;
     return filter
-      ? `<button class="tile ${cls}" onclick="setFilter(${jsq(filter)})" title="Show these podcasts">${inner}</button>`
+      ? `<button class="tile ${cls}" onclick="navTo(${jsq(filter)})" title="Show these episodes">${inner}</button>`
       : `<div class="tile ${cls}">${inner}</div>`;
   };
   const gb = stats ? (stats.storedBytes / 1e9).toFixed(1) + ' GB' : '<span class="skel"></span>';
   const files = stats ? esc(stats.storedFiles) : '<span class="skel"></span>';
   const hrs = stats ? (stats.totalSkippedSeconds / 3600).toFixed(1) + ' h' : '<span class="skel"></span>';
   const loaded = !!window._pods;
+  const failN = failedData ? Number(failedData.total) || 0 : tot.fail;
   document.getElementById('tiles').innerHTML =
     tile(loaded ? pods.length : '-', 'feeds' + (loaded ? ' (' + pods.filter(p => p.subscribed).length + ' subscribed)' : ''), '', '') +
     tile(files, 'episodes on disk (' + gb.replace(/<[^>]*>/g, '') + ')', 'good', '') +
     tile(hrs, 'sponsor time skipped', '', '') +
     tile(loaded ? tot.dling + tot.nd : '-', 'recent episodes pending' + (tot.dling ? ' (' + tot.dling + ' downloading)' : ''), tot.dling ? 'busy' : '', '') +
-    tile(loaded ? tot.fail : '-', 'recent episodes failed', tot.fail ? 'warn' : '', tot.fail ? 'fail' : '');
+    tile(failedData || loaded ? failN : '-', 'failed downloads', failN ? 'warn' : '', failN ? 'failed' : '');
   const al = document.getElementById('failAlert');
-  if (tot.fail) {
-    const n = pods.filter(p => epCounts(p).fail > 0).length;
+  if (failN) {
     al.className = 'alert show';
-    al.innerHTML = `<span style="color:var(--red)">${I('alert')}</span><span class="grow"><b>${tot.fail} recent episode(s) failed to download</b> across ${n} feed(s). Retry them from the episode list, or check the activity log for the reason.</span>` +
-      `<button class="btn sm" onclick="setFilter('fail')">Show them</button><button class="btn sm" onclick="openLog()">Open log</button>`;
+    al.innerHTML = `<span style="color:var(--red)">${I('alert')}</span><span class="grow"><b>${failN} episode(s) failed to download.</b> Review them and retry, or check the activity log for the reason.</span>` +
+      `<button class="btn sm" onclick="navTo('failed')">Review failed</button><button class="btn sm" onclick="openLog()">Open log</button>`;
   } else {
     al.className = 'alert';
     al.innerHTML = '';
@@ -552,10 +645,11 @@ function renderFilters() {
   document.getElementById('gmChannel').setAttribute('aria-pressed', groupMode === 'channel');
   document.getElementById('gmSub').setAttribute('aria-pressed', groupMode === 'sub');
 }
-function setFilter(k) { activeFilter = k; lsSet('jojoFilter', k); renderPods(); }
+function setFilter(k) { activeFilter = k; lsSet('jojoFilter', k); if (view !== 'pods') { view = 'pods'; applyView(); } renderPods(); }
 function setGroupMode(m) { groupMode = m; lsSet('jojoGroup', m); renderPods(); }
 let searchTimer = null;
 function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(renderPods, 120); }
+function goPodcast(name) { document.getElementById('search').value = name; setFilter('all'); window.scrollTo(0, 0); }
 function clearFilters() { document.getElementById('search').value = ''; setFilter('all'); }
 
 /* ---- main render ---- */
@@ -635,6 +729,7 @@ function renderCard(p, pods) {
       <a class="btn apple" href="podcast://${esc(location.host)}${esc(p.feedPath)}${esc(tok)}">${publicUrl ? 'Subscribe (local)' : 'Subscribe in Apple Podcasts'}</a>
       ${publicUrl ? `<a class="btn remote" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${esc(p.feedPath)}${esc(remoteTok)}">Subscribe (remote)</a>` : ''}
       <button class="btn" onclick="copyFeed(${jsq(publicUrl ? publicUrl + p.feedPath + remoteTok : feedUrl)}, this)">Copy RSS URL</button>
+      <button class="btn" title="Queue every episode of this feed that is not downloaded yet (max 200, one at a time)" onclick="downloadAllEpisodes(${jsq(p.id)}, ${jsq(p.name)}, ${Number(p.episodeCount) || 0})">${I('download')} Download all</button>
       <button class="btn ${p.autoDownload ? 'autodl-on' : 'autodl-off'}" aria-pressed="${!!p.autoDownload}" title="Toggle automatic download of new episodes" onclick="toggleAutoDl(${jsq(p.id)}, ${!!p.autoDownload})">Auto-download: ${p.autoDownload ? 'on' : 'off'}</button>
       <button class="btn del" title="Remove subscription" aria-label="Remove ${esc(p.name)}" onclick="removePodcast(${jsq(p.id)}, ${jsq(p.name)})">${I('trash')}</button>
     </div>
@@ -649,10 +744,11 @@ function renderPods() {
   const grid = document.getElementById('grid');
   renderTiles();
   renderFilters();
+  paintNav();
   const all = window._pods;
   if (!all) return;
   if (!all.length) {
-    grid.innerHTML = '<div class="empty"><h2>No podcasts yet</h2><p>Paste a YouTube playlist or channel above and press Add podcast. Use Browse channel to pick from all of a channel\'s playlists at once.</p></div>';
+    grid.innerHTML = '<div class="empty"><h2>No podcasts yet</h2><p>Open Add / Browse to paste a YouTube playlist or channel, or browse a channel to pick from all of its playlists at once.</p><button class="btn primary" onclick="navTo(\'add\')">Add a podcast</button></div>';
     return;
   }
   const q = document.getElementById('search').value.trim().toLowerCase();
@@ -743,7 +839,8 @@ async function loadEvents() {
 function renderLog() {
   const events = lastEvents || [];
   const errs = events.filter(e => e.level === 'error').length;
-  document.getElementById('errCount').textContent = errs ? `(${errs} errors)` : '';
+  document.getElementById('errCount').textContent = errs ? String(errs) : '';
+  document.getElementById('errCount').title = errs ? errs + ' recent error(s)' : '';
   document.getElementById('logInfo').textContent = events.length ? `${events.length} recent events, ${errs} error(s)` : '';
   const shown = logErrorsOnly ? events.filter(e => e.level === 'error') : events;
   document.getElementById('logList').innerHTML = shown.length
@@ -765,18 +862,13 @@ async function loadStats() {
   } catch (e) {}
 }
 
-function loadAll() { load(); loadEvents(); loadStats(); }
-function toggleLog() {
-  const open = document.getElementById('logPanel').classList.toggle('open');
-  document.getElementById('logToggle').setAttribute('aria-expanded', open);
-}
+function loadAll() { load(); loadEvents(); loadStats(); loadFailed(); }
+function toggleLog() { navTo('log'); }
 function openLog() {
-  const p = document.getElementById('logPanel');
-  if (!p.classList.contains('open')) toggleLog();
   logErrorsOnly = true;
   document.getElementById('logErrOnly').setAttribute('aria-pressed', 'true');
   renderLog();
-  p.scrollIntoView({ block: 'center' });
+  navTo('log');
 }
 
 /* ---- add / browse ---- */
@@ -938,7 +1030,9 @@ function closeModal() {
   if (lastFocus && lastFocus.focus && document.contains(lastFocus)) lastFocus.focus();
 }
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('modalWrap').classList.contains('open')) closeModal();
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('modalWrap').classList.contains('open')) closeModal();
+  else if (drawerOpen()) closeDrawer();
 });
 
 /* ---- episode browser modal ---- */
@@ -1032,6 +1126,157 @@ async function createSplit(parentId, filter, btn) {
   if (!res.ok) { btn.disabled = false; toast(body.message || 'Failed to create filtered feed', 'err'); return; }
   closeModal();
   loadAll();
+}
+
+/* ---- navigation: sidebar + views ---- */
+const VIEW_TEXT = {
+  all: ['All podcasts', 'YouTube and RSS to clean podcast feeds, sponsor-free'],
+  sub: ['Subscribed', 'Feeds you have marked as subscribed on your devices'],
+  unsub: ['Not subscribed', 'Feeds that are tracked but not marked as subscribed'],
+  add: ['Add / Browse', 'Add a playlist or channel, or browse a channel to subscribe in bulk'],
+  failed: ['Failed downloads', 'Episodes that could not be downloaded, across every feed'],
+  log: ['Activity log', 'Recent events from the server']
+};
+function navKey() {
+  if (view !== 'pods') return view;
+  return (activeFilter === 'sub' || activeFilter === 'unsub') ? activeFilter : 'all';
+}
+function paintNav() {
+  const cur = navKey();
+  document.querySelectorAll('#sidebar [data-nav]').forEach(b => {
+    if (b.dataset.nav === cur) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  const pods = window._pods;
+  const set = (k, v) => { const el = document.querySelector('#sidebar [data-count="' + k + '"]'); if (el && k !== 'log') el.textContent = v; };
+  set('all', pods ? pods.length : '');
+  set('sub', pods ? pods.filter(p => p.subscribed).length : '');
+  set('unsub', pods ? pods.filter(p => !p.subscribed).length : '');
+  set('failed', failedData && failedData.total ? failedData.total : '');
+  const t = VIEW_TEXT[cur];
+  document.getElementById('viewTitle').textContent = t[0];
+  document.getElementById('viewSub').textContent = t[1];
+}
+function applyView() {
+  document.getElementById('viewPods').hidden = view !== 'pods';
+  document.getElementById('viewAdd').hidden = view !== 'add';
+  document.getElementById('viewFailed').hidden = view !== 'failed';
+  document.getElementById('viewLog').hidden = view !== 'log';
+  paintNav();
+  if (view === 'failed') { renderFailed(); loadFailed(); }
+  if (view === 'log') { renderLog(); loadEvents(); }
+}
+function navTo(k) {
+  closeDrawer(false);
+  if (k === 'all' || k === 'sub' || k === 'unsub') {
+    view = 'pods'; applyView(); setFilter(k);
+  } else {
+    view = k; applyView();
+  }
+  window.scrollTo(0, 0);
+  if (k === 'add') document.getElementById('input').focus();
+}
+
+/* drawer (phone) */
+const drawerMQ = window.matchMedia('(max-width: 899px)');
+function drawerOpen() { return document.getElementById('sidebar').classList.contains('open'); }
+function openDrawer() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('navBackdrop').classList.add('open');
+  document.body.classList.add('drawer-open');
+  document.getElementById('menuBtn').setAttribute('aria-expanded', 'true');
+  const target = document.querySelector('#sidebar [aria-current="page"]') || document.querySelector('#sidebar .nav-item');
+  if (target) target.focus();
+}
+function closeDrawer(restoreFocus) {
+  if (!drawerOpen()) return;
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('navBackdrop').classList.remove('open');
+  document.body.classList.remove('drawer-open');
+  const mb = document.getElementById('menuBtn');
+  mb.setAttribute('aria-expanded', 'false');
+  if (restoreFocus !== false) mb.focus();
+}
+document.getElementById('sidebar').addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || !drawerOpen()) return;
+  const f = [...document.querySelectorAll('#sidebar button, #sidebar a[href]')].filter(el => el.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+drawerMQ.addEventListener('change', () => { if (!drawerMQ.matches) closeDrawer(false); });
+
+/* ---- failed downloads view ---- */
+async function loadFailed() {
+  try {
+    const res = await fetch('/api/failed' + tok);
+    if (!res.ok) throw new Error(await errText(res, 'Could not load failed downloads'));
+    failedData = await res.json();
+    failedErr = '';
+  } catch (e) {
+    failedErr = e.message;
+  }
+  renderTiles();
+  paintNav();
+  if (view === 'failed') renderFailed();
+}
+function renderFailed() {
+  const box = document.getElementById('failedBody');
+  if (failedErr && !failedData) {
+    box.innerHTML = `<div class="empty err"><h2>Could not load failed downloads</h2><p>${esc(failedErr)}</p><button class="btn" onclick="loadFailed()">Try again</button></div>`;
+    return;
+  }
+  if (!failedData) { box.innerHTML = '<div class="empty"><p>Loading failed downloads...</p></div>'; return; }
+  const eps = failedData.episodes || [];
+  const total = Number(failedData.total) || eps.length;
+  if (!total && !eps.length) {
+    box.innerHTML = `<div class="empty"><h2>No failed downloads</h2><p>Every episode that was tried has downloaded, or is still waiting its turn. Failures will show up here with a retry button.</p><button class="btn" onclick="navTo('all')">Back to all podcasts</button></div>`;
+    return;
+  }
+  const rows = eps.map(e => `
+    <div class="fail-row">
+      <span class="st">${I('alert')}</span>
+      <div class="txt">
+        <div class="nm">${esc(e.name)}</div>
+        <div class="sub2"><button class="link-btn" title="Show this podcast" onclick="goPodcast(${jsq(e.podcastName)})">${esc(e.podcastName)}</button></div>
+      </div>
+      <span class="att">${esc(e.attempts)} failed attempt(s)</span>
+      <button class="ep-btn retry" onclick="downloadEpisode(${jsq(e.videoId)}, this)">Retry</button>
+    </div>`).join('');
+  box.innerHTML = `
+    <div class="fv-bar">
+      <span class="grow"><b>${esc(total)}</b> episode(s) failed to download.${total > eps.length ? ' Showing the first ' + esc(eps.length) + '.' : ''}</span>
+      <button class="btn" onclick="openLog()">View errors in log</button>
+      <button class="btn primary" id="retryAllBtn" onclick="retryAllFailed(this)">${I('retry')} Retry all</button>
+    </div>
+    <div class="fail-list">${rows}</div>`;
+}
+async function retryAllFailed(btn) {
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/failed/retry' + tok, { method: 'POST' });
+    if (!res.ok) { toast(await errText(res, 'Could not queue the retries'), 'err'); return; }
+    const j = await res.json().catch(() => ({}));
+    const n = Number(j.queued) || 0;
+    toast(n ? `Queued ${n} failed download(s) for retry.` : 'Nothing was queued.', n ? 'ok' : '');
+    setTimeout(loadAll, 2000);
+  } catch (e) {
+    toast('Could not queue the retries: ' + e.message, 'err');
+  } finally { btn.disabled = false; }
+}
+async function downloadAllEpisodes(id, name, count) {
+  const n = Math.min(count || 0, 200);
+  if (!confirm(`Download all episodes of "${name}"?\n\nUp to ${n || 'all'} episode(s) that are not downloaded yet will be queued (max 200). They download one at a time, so this can take a while.`)) return;
+  try {
+    const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + '/download-all' + tok, { method: 'POST' });
+    if (!res.ok) { toast(await errText(res, 'Could not queue downloads'), 'err'); return; }
+    const j = await res.json().catch(() => ({}));
+    const q = Number(j.queued) || 0;
+    toast(q ? `Queued ${q} episode(s) of "${name}" for download.` : `Nothing to queue for "${name}": everything is downloaded or already queued.`, q ? 'ok' : '');
+    setTimeout(loadAll, 2000);
+  } catch (e) {
+    toast('Could not queue downloads: ' + e.message, 'err');
+  }
 }
 
 /* ---- misc actions ---- */
@@ -1225,6 +1470,7 @@ function copyFeed(url, btn) {
 paintThemeBtn();
 renderFilters();
 renderTiles();
+applyView();
 loadAll();
 setInterval(loadAll, 20000);
 </script>
