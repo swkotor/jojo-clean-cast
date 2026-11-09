@@ -25,6 +25,7 @@ const (
 	llmOverlap      = 60.0     // seconds shared with the next window
 	llmMinConfident = 0.9      // below this, the model's suggestion is ignored
 	llmMaxRequests  = 40       // a runaway transcript cannot make unbounded calls
+	llmMinSignal    = 4        // advertising score the span text must reach (see adScore)
 )
 
 // LLMConfig says where the model is. Empty URL means the pass is off.
@@ -92,16 +93,27 @@ func windowTranscript(segs []Segment, a, b float64) string {
 	return sb.String()
 }
 
-const llmSystemPrompt = `You check a podcast transcript for advertising read by the host.
-An ad read is a paid or promotional message: a sponsor, a product or service pitch,
-a promo code, a call to visit a website or sign up, or a "brought to you by" spot.
-A host talking about their own show, a guest's work, news, or a passing mention of a
-product in a non-promotional way is NOT an ad.
-Each line starts with its start time in seconds in square brackets.
-Reply with JSON only, in exactly this shape:
+const llmSystemPrompt = `You find ADVERTISEMENTS in a podcast transcript: paid or sponsored messages
+read by the host. Each line starts with its start time in seconds in square brackets.
+
+An advertisement is ONLY:
+- a paid sponsor read ("this episode is brought to you by", "thanks to our sponsor"),
+- a promo code or discount offer,
+- a call to sign up or subscribe to a product or service with an offer or trial,
+- a premium or membership pitch that asks listeners to pay.
+
+NOT an advertisement (never cut these):
+- news, reviews, trailers, or announcements about games, films, products or companies,
+  even when the announcement is exciting or says "watch this space" or "tomorrow",
+- discussion of a product, game or service as a topic,
+- the show's own schedule, polls, merchandise, or other content,
+- guests talking about their own work,
+- anything without a clear paid or promotional offer.
+
+When in doubt, do not report it. Reply with JSON only, in exactly this shape:
 {"ads":[{"start":<seconds>,"end":<seconds>,"confidence":<0 to 1>,"reason":"<short>"}]}
 Use the first line's time as the start and the last line's time as the end of the ad.
-If there are no ads, reply {"ads":[]}.`
+If there are no advertisements, reply {"ads":[]}.`
 
 // askModel sends one window and returns the parsed answer.
 func askModel(cfg LLMConfig, transcript string) (llmAnswer, error) {
@@ -162,6 +174,11 @@ func parseLLMAds(ans llmAnswer, segs []Segment, total float64, o Options) []Span
 			continue
 		}
 		a, b = snap(segs, a, b)
+		// The model alone is not trusted to cut. The text inside the span must
+		// also carry advertising wording that the ad-signal scorer recognises.
+		if adScore(textIn(segs, a, b)) < llmMinSignal {
+			continue
+		}
 		span := Span{Start: a, End: b, Reason: "llm: " + strings.TrimSpace(ad.Reason)}
 		if span.Seconds() < o.MinSpan || span.Seconds() > o.MaxSpan {
 			continue

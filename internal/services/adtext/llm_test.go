@@ -31,7 +31,7 @@ func transcript(n int, step float64) []Segment {
 	var segs []Segment
 	for i := 0; i < n; i++ {
 		start := float64(i) * step
-		segs = append(segs, Segment{Start: start, End: start + step, Text: fmt.Sprintf("line %d", i)})
+		segs = append(segs, Segment{Start: start, End: start + step, Text: fmt.Sprintf("line %d, use code SHOW at example.com", i)})
 	}
 	return segs
 }
@@ -117,4 +117,27 @@ func containsText(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// Real text from the first production run. The first two were cut in error
+// (news about game announcements); the last was a genuine sponsor read.
+func TestLLMRejectsNewsEvenWhenConfident(t *testing.T) {
+	segs := []Segment{
+		{Start: 1352, End: 1360, Text: "Devolver Digital, saying heads up. Devolver Digital is announcing its first AAA game tomorrow."},
+		{Start: 1360, End: 1370, Text: "Watch this space. Let me think that means you think they're kind of had a boy friendly mastered baby."},
+		{Start: 1370, End: 1380, Text: "Yes. Finally, I think that's can't be trouble either. It would be like Quad A, of course."},
+		{Start: 2263, End: 2270, Text: "Dragon Quest RPG, The Cursed Tree, and The Chosen Isle announced for iOS and Android."},
+		{Start: 2270, End: 2280, Text: "Further information about the game, including the announcement trailer, will premiere tomorrow."},
+		{Start: 291, End: 296, Text: "So if you want to be a part of that, go to giantbomb.com slash join."},
+		{Start: 296, End: 302, Text: "If you become a premium member, you're going to get access to ad free versions of all of our shows."},
+	}
+	ans := llmAnswer{Ads: []llmAd{
+		{Start: 1352, End: 1380, Confidence: 0.99, Reason: "announcement"},
+		{Start: 2263, End: 2280, Confidence: 0.99, Reason: "product pitch"},
+		{Start: 291, End: 302, Confidence: 0.99, Reason: "premium membership"},
+	}}
+	got := parseLLMAds(ans, segs, 4000, DefaultOptions())
+	if len(got) != 1 || got[0].Start != 291 {
+		t.Fatalf("only the sponsor read may be cut, got %+v", got)
+	}
 }
