@@ -422,7 +422,7 @@ func checkAuthentication(c echo.Context) error {
 		user, pass, ok := c.Request().BasicAuth()
 		token := requestToken(c)
 
-		basicOk := ok && pass == config.AppConfig.Authentication.BasicAuth.Password
+		basicOk := ok && subtle.ConstantTimeCompare([]byte(pass), []byte(config.AppConfig.Authentication.BasicAuth.Password)) == 1
 		if config.AppConfig.Authentication.BasicAuth.Username != "" {
 			basicOk = basicOk && user == config.AppConfig.Authentication.BasicAuth.Username
 		}
@@ -437,8 +437,10 @@ func checkAuthentication(c echo.Context) error {
 	}
 
 	if basicConfigured {
-		_, pass, ok := c.Request().BasicAuth()
-		if ok && pass == config.AppConfig.Authentication.BasicAuth.Password {
+		user, pass, ok := c.Request().BasicAuth()
+		want := config.AppConfig.Authentication.BasicAuth
+		if ok && subtle.ConstantTimeCompare([]byte(pass), []byte(want.Password)) == 1 &&
+			(want.Username == "" || subtle.ConstantTimeCompare([]byte(user), []byte(want.Username)) == 1) {
 			return nil
 		}
 		return echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")

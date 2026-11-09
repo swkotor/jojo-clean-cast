@@ -224,8 +224,20 @@ func CheckPodcast(podcastId string) {
 	}()
 }
 
-// recentEpisodesFor returns the feed's latest N episodes (filter-aware)
+// recentEpisodesFor returns the feed's latest N episodes (filter-aware), or nil
+// if they could not be read. Callers that delete based on the result must use
+// recentEpisodesChecked instead.
 func recentEpisodesFor(p *models.Podcast) []models.PodcastEpisode {
+	eps, err := recentEpisodesChecked(p)
+	if err != nil {
+		return nil
+	}
+	return eps
+}
+
+// recentEpisodesChecked is recentEpisodesFor with the error kept, so cleanup can
+// tell "no episodes" apart from "could not read them".
+func recentEpisodesChecked(p *models.Podcast) ([]models.PodcastEpisode, error) {
 	var eps []models.PodcastEpisode
 	var err error
 	if p.IsVirtual() {
@@ -235,12 +247,9 @@ func recentEpisodesFor(p *models.Podcast) []models.PodcastEpisode {
 	}
 	if err != nil {
 		events.Error("Could not read episodes for %s: %v", p.DisplayName(), err)
-		// Return nil, not a partial list: callers delete everything NOT in the
-		// keep set, so one transient SQLite error would wipe a podcast's whole
-		// back catalogue.
-		return nil
+		return nil, err
 	}
-	return eps
+	return eps, nil
 }
 
 // How long an episode must have gone untouched before we are willing to
@@ -479,14 +488,28 @@ func runOnce() {
 		}
 
 		// keep set = latest N of parent + latest N of each child filter
+		// If any part of the keep set cannot be read, skip cleanup for this
+		// podcast this pass. Pruning against a partial set would delete episodes
+		// that are still in the latest window.
 		keep := map[string]bool{}
-		for _, ep := range recentEpisodesFor(&p) {
-			keep[ep.YoutubeVideoId] = true
-		}
-		for i := range kids {
-			for _, ep := range recentEpisodesFor(&kids[i]) {
+		complete := true
+		addKeep := func(q *models.Podcast) {
+			eps, err := recentEpisodesChecked(q)
+			if err != nil {
+				complete = false
+				return
+			}
+			for _, ep := range eps {
 				keep[ep.YoutubeVideoId] = true
 			}
+		}
+		addKeep(&p)
+		for i := range kids {
+			addKeep(&kids[i])
+		}
+		if !complete {
+			events.Error("Skipping cleanup for %s this pass: its episode list could not be read", p.DisplayName())
+			continue
 		}
 		cleanupServed(keep)
 		pruneOldEpisodes(p.Id, keep)

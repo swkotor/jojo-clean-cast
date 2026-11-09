@@ -33,27 +33,24 @@ func Ingest(rawURL string) (*models.Podcast, error) {
 	}
 
 	existing := database.GetPodcast(id)
-	p := &models.Podcast{
-		Id:            id,
-		PodcastName:   f.Title,
-		Description:   f.Description,
-		ArtistName:    f.Author,
-		ImageUrl:      f.ImageURL,
-		Category:      f.Category,
-		Explicit:      f.Explicit,
-		SourceType:    "rss",
-		FeedUrl:       feedURL,
-		LastFeedFetch: time.Now().Unix(),
-	}
+	// Start from everything already stored, so every setting the user has
+	// made (ad-text strip, filters, channel, custom name and art, subscription,
+	// dates) survives a re-add. Only the feed-derived fields are overwritten.
+	p := &models.Podcast{}
 	if existing != nil {
-		// Preserve everything the user has set on this podcast; only the
-		// feed-derived fields are refreshed.
-		p.CustomName = existing.CustomName
-		p.CustomImage = existing.CustomImage
-		p.AutoImage = existing.AutoImage
-		p.AutoDownloadOff = existing.AutoDownloadOff
-		p.Subscribed = existing.Subscribed
-		p.SponsorblockCategories = existing.SponsorblockCategories
+		*p = *existing
+	}
+	p.Id = id
+	p.PodcastName = f.Title
+	p.Description = f.Description
+	p.ArtistName = f.Author
+	p.ImageUrl = f.ImageURL
+	p.Category = f.Category
+	p.Explicit = f.Explicit
+	p.SourceType = "rss"
+	p.FeedUrl = feedURL
+	p.LastFeedFetch = time.Now().Unix()
+	if existing != nil {
 		database.UpdatePodcast(p)
 	} else {
 		database.SavePodcast(p)

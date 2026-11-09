@@ -34,7 +34,10 @@ func GetRecentEpisodes(podcastId string, limit int) ([]models.PodcastEpisode, er
 // include filter and any number of exclude terms (all case-insensitive
 // substring matches on the episode title)
 func filteredQuery(podcastId, filter string, exclude []string) *gorm.DB {
-	query := db.Model(&models.PodcastEpisode{}).Where("podcast_id = ?", podcastId)
+	// Same source rule as the feed itself, so a podcast holding both YouTube and
+	// RSS rows does not list each episode twice.
+	scopeSQL, scopeArg := sourceScope(podcastId)
+	query := db.Model(&models.PodcastEpisode{}).Where("podcast_id = ?", podcastId).Where(scopeSQL, scopeArg)
 	if filter != "" {
 		query = query.Where("episode_name LIKE ?", "%"+filter+"%")
 	}

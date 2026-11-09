@@ -3,6 +3,7 @@ package artwork
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"ikoyhn/podcast-sponsorblock/internal/config"
 	"ikoyhn/podcast-sponsorblock/internal/database"
 	"ikoyhn/podcast-sponsorblock/internal/services/events"
@@ -94,8 +95,14 @@ func download(podcastId, imageUrl string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", os.ErrNotExist
 	}
+	// Only accept an image. An HTML error page served with a 200 used to be
+	// saved as <id>.jpg and served as one.
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
+	if !strings.HasPrefix(mediaType, "image/") {
+		return "", fmt.Errorf("artwork is %q, not an image", mediaType)
+	}
 	ext := ".jpg"
-	switch resp.Header.Get("Content-Type") {
+	switch mediaType {
 	case "image/png":
 		ext = ".png"
 	case "image/webp":
@@ -104,20 +111,35 @@ func download(podcastId, imageUrl string) (string, error) {
 	if err := os.MkdirAll(Dir(), 0o755); err != nil {
 		return "", err
 	}
-	// remove any previously cached art for this podcast
-	if old := database.FindFileWithId(Dir(), podcastId); old != "" {
-		os.Remove(old)
-	}
+	// Download beside the cached copy and swap it in only once complete, so a
+	// dropped connection cannot leave a truncated image or no image at all.
+	const maxArt = 20 << 20
+	old := database.FindFileWithId(Dir(), podcastId)
 	name := podcastId + ext
-	f, err := os.Create(filepath.Join(Dir(), name))
+	final := filepath.Join(Dir(), name)
+	tmp := final + ".part"
+	f, err := os.Create(tmp)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxArt+1))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil && n > maxArt {
+		err = fmt.Errorf("artwork is larger than %d MB", maxArt>>20)
+	}
+	if err != nil {
+		os.Remove(tmp)
 		return "", err
 	}
-	f.Close()
+	if old != "" && old != final {
+		os.Remove(old)
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		os.Remove(tmp)
+		return "", err
+	}
 
 	// Podcast clients (Apple in particular) expect square artwork. If we had
 	// to fall back to a 16:9 video thumbnail, centre-crop it to a square.

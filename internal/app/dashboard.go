@@ -311,6 +311,9 @@ func registerDashboardRoutes(e *echo.Echo) {
 			}
 		}
 		if req.FeedUrl != nil {
+			if fresh := database.GetPodcast(id); fresh != nil {
+				p = fresh
+			}
 			raw := strings.TrimSpace(*req.FeedUrl)
 			if raw == "" {
 				p.FeedUrl = ""
@@ -330,6 +333,9 @@ func registerDashboardRoutes(e *echo.Echo) {
 			p = database.GetPodcast(id)
 		}
 		if req.Source != nil {
+			if fresh := database.GetPodcast(id); fresh != nil {
+				p = fresh
+			}
 			want := strings.ToLower(strings.TrimSpace(*req.Source))
 			if want != "rss" && want != "youtube" {
 				return echo.NewHTTPError(http.StatusBadRequest, "source must be 'rss' or 'youtube'")
@@ -352,6 +358,9 @@ func registerDashboardRoutes(e *echo.Echo) {
 			}
 		}
 		if req.AdTextStrip != nil {
+			if fresh := database.GetPodcast(id); fresh != nil {
+				p = fresh
+			}
 			p.AdTextStrip = *req.AdTextStrip
 			database.UpdatePodcast(p)
 			state := "enabled"
@@ -801,7 +810,9 @@ func registerDashboardRoutes(e *echo.Echo) {
 			return err
 		}
 		videoId := c.Param("videoId")
-		if !common.IsValidParam(videoId) {
+		// IsValidID, not IsValidParam: "cover" or "metadata" would otherwise match
+		// a podcast folder's sidecar file by prefix and delete it.
+		if !common.IsValidID(videoId) {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid video id")
 		}
 		audioDirAbs, _ := filepath.Abs(config.AppConfig.Setup.AudioDir)

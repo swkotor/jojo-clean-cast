@@ -873,7 +873,7 @@ function renderSbEditor() {
       <button onclick="addSbCustom()">Add</button>
     </div>
     <div class="m-custom" style="border-top:1px solid var(--border)">
-      <div style="flex:1;font-size:12px;color:var(--muted)">Selected: ${[...sbState.selected].join(', ') || 'none (nothing will be cut)'}</div>
+      <div style="flex:1;font-size:12px;color:var(--muted)">Selected: ${esc([...sbState.selected].join(', ')) || 'none (nothing will be cut)'}</div>
       <button style="background:none;border:1px solid var(--border);color:var(--muted)" onclick="saveSb(true)">Use global default</button>
       <button onclick="saveSb(false)">Save</button>
     </div>`;

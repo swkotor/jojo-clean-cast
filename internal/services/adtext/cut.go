@@ -121,9 +121,10 @@ func CutStreamCopy(path string, spans []Span, total float64) (float64, error) {
 		list := filepath.Join(work, "list.txt")
 		var b strings.Builder
 		for _, p := range parts {
-			// the concat demuxer takes a quoted path; single quotes inside a
-			// path would break it, and our names are generated, so this is safe
-			b.WriteString("file '" + p + "'\n")
+			// the concat demuxer takes a single-quoted path, and a single quote
+			// inside the path must be written as '\'' . Podcast folder names keep
+			// apostrophes (e.g. "Joe's Show"), so this matters.
+			b.WriteString("file '" + strings.ReplaceAll(p, "'", `'\''`) + "'\n")
 		}
 		if err := os.WriteFile(list, []byte(b.String()), 0o644); err != nil {
 			return 0, err

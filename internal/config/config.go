@@ -69,7 +69,12 @@ func Load() (*Config, error) {
 	propertiesFile := path.Join(configDir, "properties.yml")
 	fileInfo, err := os.Stat(propertiesFile)
 	if err == nil && fileInfo.Size() > 0 {
-		v.ReadInConfig()
+		// A malformed file used to be skipped silently, which dropped the auth
+		// token and fell back to defaults with no warning. Refuse to start.
+		if rerr := v.ReadInConfig(); rerr != nil {
+			fmt.Fprintf(os.Stderr, "properties.yml is unreadable, refusing to start: %v\n", rerr)
+			os.Exit(1)
+		}
 	}
 
 	v.SetDefault("ytdlp.episode-duration-minimum", "3m")
