@@ -3,6 +3,8 @@ package database
 import (
 	"ikoyhn/podcast-sponsorblock/internal/models"
 
+	"strings"
+
 	"gorm.io/gorm"
 )
 
@@ -30,6 +32,13 @@ func GetRecentEpisodes(podcastId string, limit int) ([]models.PodcastEpisode, er
 	return episodes, nil
 }
 
+// likeContains makes a LIKE pattern matching the text anywhere. % and _ in the
+// user's text are escaped, so they match literally instead of as wildcards.
+func likeContains(text string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return "%" + r.Replace(text) + "%"
+}
+
 // filteredQuery builds a query for a podcast's episodes with an optional
 // include filter and any number of exclude terms (all case-insensitive
 // substring matches on the episode title)
@@ -39,10 +48,10 @@ func filteredQuery(podcastId, filter string, exclude []string) *gorm.DB {
 	scopeSQL, scopeArg := sourceScope(podcastId)
 	query := db.Model(&models.PodcastEpisode{}).Where("podcast_id = ?", podcastId).Where(scopeSQL, scopeArg)
 	if filter != "" {
-		query = query.Where("episode_name LIKE ?", "%"+filter+"%")
+		query = query.Where(`episode_name LIKE ? ESCAPE '\'`, likeContains(filter))
 	}
 	for _, term := range exclude {
-		query = query.Where("episode_name NOT LIKE ?", "%"+term+"%")
+		query = query.Where(`episode_name NOT LIKE ? ESCAPE '\'`, likeContains(term))
 	}
 	return query
 }
@@ -216,8 +225,12 @@ func GetPlaybackHistory(videoId string) *models.EpisodePlaybackHistory {
 
 // DeletePodcastAndEpisodes removes a podcast and all of its episode records
 func DeletePodcastAndEpisodes(podcastId string) error {
-	if err := db.Where("podcast_id = ?", podcastId).Delete(&models.PodcastEpisode{}).Error; err != nil {
-		return err
-	}
-	return db.Where("id = ?", podcastId).Delete(&models.Podcast{}).Error
+	// One transaction: a failure between the two deletes used to leave a podcast
+	// with no episodes.
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("podcast_id = ?", podcastId).Delete(&models.PodcastEpisode{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ?", podcastId).Delete(&models.Podcast{}).Error
+	})
 }

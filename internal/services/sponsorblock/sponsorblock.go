@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -31,9 +32,14 @@ var (
 func DeterminePodcastDownload(youtubeVideoId string) (bool, float64) {
 	episodeHistory := database.GetEpisodePlaybackHistory(youtubeVideoId)
 
-	updatedSkippedTime := TotalSponsorTimeSkipped(youtubeVideoId)
+	updatedSkippedTime, ok := lookupSkippedTime(youtubeVideoId)
 	if episodeHistory == nil || episodeHistory.YoutubeVideoId == "" {
 		return true, updatedSkippedTime
+	}
+	if !ok {
+		// SponsorBlock could not be asked. Keep the stored baseline rather than
+		// reading the failure as "all segments removed" and re-downloading.
+		return false, episodeHistory.TotalTimeSkipped
 	}
 
 	if math.Abs(episodeHistory.TotalTimeSkipped-updatedSkippedTime) > 2 {
@@ -44,12 +50,23 @@ func DeterminePodcastDownload(youtubeVideoId string) (bool, float64) {
 	return false, updatedSkippedTime
 }
 
+// TotalSponsorTimeSkipped returns the seconds SponsorBlock offers for a video.
+// It returns 0 when the lookup fails, so use lookupSkippedTime where a failure
+// must not be mistaken for "no segments".
 func TotalSponsorTimeSkipped(youtubeVideoId string) float64 {
+	total, _ := lookupSkippedTime(youtubeVideoId)
+	return total
+}
+
+// lookupSkippedTime also reports whether the answer is trustworthy. A network
+// error, a rate limit or an unreadable response gives ok=false; a 404 ("no
+// segments") and a cached miss are ok=true with 0.
+func lookupSkippedTime(youtubeVideoId string) (float64, bool) {
 	sbMissMu.Lock()
 	until, missed := sbMissUntil[youtubeVideoId]
 	sbMissMu.Unlock()
 	if missed && time.Now().Before(until) {
-		return 0
+		return 0, true
 	}
 	log.Debug("[SponsorBlock] Looking up podcast in SponsorBlock API...")
 	endURL := SPONSORBLOCK_API_URL + youtubeVideoId
@@ -63,7 +80,7 @@ func TotalSponsorTimeSkipped(youtubeVideoId string) float64 {
 	resp, err := sponsorBlockClient.Get(endURL)
 	if err != nil {
 		log.Error(err)
-		return 0
+		return 0, false
 	}
 	defer resp.Body.Close()
 
@@ -72,23 +89,23 @@ func TotalSponsorTimeSkipped(youtubeVideoId string) float64 {
 		sbMissUntil[youtubeVideoId] = time.Now().Add(6 * time.Hour)
 		sbMissMu.Unlock()
 		log.Debugf("[SponsorBlock] no segments for %s (rechecking in 6h)", youtubeVideoId)
-		return 0
+		return 0, true
 	}
 
 	body, bodyErr := io.ReadAll(resp.Body)
 	if bodyErr != nil {
 		log.Error(bodyErr)
-		return 0
+		return 0, false
 	}
+	// A rate limit or server error has a non-JSON body, which fails to parse
+	// here, so it is not mistaken for "no segments".
 	sponsorBlockResponse, marshErr := unmarshalSponsorBlockResponse(body)
 	if marshErr != nil {
 		log.Error(marshErr)
-		return 0
+		return 0, false
 	}
 
-	totalTimeSkipped := calculateSkippedTime(sponsorBlockResponse)
-
-	return totalTimeSkipped
+	return calculateSkippedTime(sponsorBlockResponse), true
 }
 
 func unmarshalSponsorBlockResponse(data []byte) ([]SponsorBlockResponse, error) {
@@ -101,27 +118,40 @@ func unmarshalSponsorBlockResponse(data []byte) ([]SponsorBlockResponse, error) 
 	return res, nil
 }
 
+// calculateSkippedTime returns the total seconds covered by the segments.
+// The API returns segments ordered by votes, not by time, and submitters can
+// overlap or nest them, so the spans are sorted and merged first. Summing them
+// in API order double-counted overlaps and could go negative for nested ones.
 func calculateSkippedTime(segments []SponsorBlockResponse) float64 {
-	skippedTime := float64(0)
-	prevStopTime := float64(0)
-
+	type span struct{ start, stop float64 }
+	spans := make([]span, 0, len(segments))
 	for _, segment := range segments {
-		if len(segment.Segment) < 2 {
+		if len(segment.Segment) < 2 || segment.Segment[1] <= segment.Segment[0] {
 			continue
 		}
-		startTime := segment.Segment[0]
-		stopTime := segment.Segment[1]
-
-		if startTime > prevStopTime {
-			skippedTime += stopTime - startTime
-		} else {
-			skippedTime += stopTime - prevStopTime
-		}
-
-		prevStopTime = stopTime
+		spans = append(spans, span{segment.Segment[0], segment.Segment[1]})
 	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
 
-	return skippedTime
+	total := float64(0)
+	open := false
+	var curStart, curStop float64
+	for _, s := range spans {
+		if !open {
+			curStart, curStop, open = s.start, s.stop, true
+			continue
+		}
+		if s.start <= curStop {
+			curStop = math.Max(curStop, s.stop)
+			continue
+		}
+		total += curStop - curStart
+		curStart, curStop = s.start, s.stop
+	}
+	if open {
+		total += curStop - curStart
+	}
+	return total
 }
 
 func getCategories() []string {
