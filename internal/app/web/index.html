@@ -3,278 +3,347 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark light">
 <title>jojo-podcasts</title>
+<script>
+// apply the saved theme before first paint (no flash)
+try { var t = localStorage.getItem('jojoTheme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
 <style>
   :root {
-    --bg: #0f1117;
-    --card: #1a1d27;
-    --card-hover: #20242f;
-    --border: #2a2e3b;
-    --text: #e8eaf0;
-    --muted: #8b90a0;
-    --accent: #8b5cf6;
-    --accent-hover: #7c3aed;
-    --green: #34d399;
-    --amber: #fbbf24;
-    --red: #f87171;
-    --cyan: #22d3ee;
+    --bg: #0e1016; --bg2: #141722; --card: #181b26; --card-hover: #1f2330; --border: #2a2f3e; --border-soft: rgba(255,255,255,.06);
+    --text: #eceef5; --muted: #a0a6b8;
+    --accent: #a78bfa; --accent-solid: #7c3aed; --accent-solid-hover: #6d28d9; --on-accent: #fff;
+    --green: #34d399; --amber: #fbbf24; --red: #f87171; --cyan: #22d3ee; --pink: #f472b6;
+    --focus: #c4b5fd; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.25);
+    --overlay: rgba(4,5,10,.7);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f3f4f9; --bg2: #eaecf4; --card: #ffffff; --card-hover: #f4f5fb; --border: #d6d9e6; --border-soft: rgba(0,0,0,.06);
+      --text: #181b27; --muted: #566074;
+      --accent: #6d28d9; --accent-solid: #6d28d9; --accent-solid-hover: #5b21b6;
+      --green: #047857; --amber: #8a4b04; --red: #b91c1c; --cyan: #0e7490; --pink: #be185d;
+      --focus: #5b21b6; --shadow: 0 1px 2px rgba(20,24,40,.08), 0 8px 24px rgba(20,24,40,.08);
+      --overlay: rgba(20,24,40,.45);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f4f9; --bg2: #eaecf4; --card: #ffffff; --card-hover: #f4f5fb; --border: #d6d9e6; --border-soft: rgba(0,0,0,.06);
+    --text: #181b27; --muted: #566074;
+    --accent: #6d28d9; --accent-solid: #6d28d9; --accent-solid-hover: #5b21b6;
+    --green: #047857; --amber: #8a4b04; --red: #b91c1c; --cyan: #0e7490; --pink: #be185d;
+    --focus: #5b21b6; --shadow: 0 1px 2px rgba(20,24,40,.08), 0 8px 24px rgba(20,24,40,.08);
+    --overlay: rgba(20,24,40,.45);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    min-height: 100vh;
+    background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.4;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
-  header { padding: 28px 32px 8px; display: flex; align-items: center; gap: 14px; }
-  header .logo {
-    width: 44px; height: 44px;
-    background: linear-gradient(135deg, var(--accent), #ec4899);
-    border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px;
-  }
-  header h1 { font-size: 24px; font-weight: 700; }
-  header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
-  #stats { color: var(--muted); font-size: 12px; margin-top: 3px; }
-  #remoteLink {
-    display: none; margin-left: auto; color: var(--accent); font-size: 13px;
-    text-decoration: none; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px;
-  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  svg.i { width: 1.1em; height: 1.1em; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -.18em; }
 
-  .add-bar { margin: 20px 32px 8px; display: flex; gap: 10px; }
+  .wrap { max-width: 1480px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 700px) { .wrap { padding: 0 32px; } }
+
+  /* header */
+  header { padding: 24px 0 8px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header .logo {
+    width: 46px; height: 46px; border-radius: 13px; color: #fff; flex-shrink: 0;
+    background: linear-gradient(135deg, #7c3aed, #ec4899); display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 18px rgba(124,58,237,.35);
+  }
+  header .logo svg { width: 24px; height: 24px; }
+  header h1 { font-size: 22px; font-weight: 750; letter-spacing: -.01em; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 1px; }
+  .head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    border-radius: 9px; padding: 8px 13px; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap;
+    transition: background .15s, border-color .15s;
+  }
+  .btn:hover { background: var(--card-hover); border-color: var(--muted); }
+  .btn.primary { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+  .btn.primary:hover { background: var(--accent-solid-hover); }
+  .btn.ghost { background: transparent; color: var(--muted); }
+  .btn.ghost:hover { color: var(--text); }
+  .btn:disabled { opacity: .55; cursor: wait; }
+  .btn.icon { padding: 8px; }
+  .btn.sm { padding: 5px 10px; font-size: 12px; }
+
+  /* summary tiles */
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 16px 0 4px; }
+  @media (min-width: 700px) { .tiles { grid-template-columns: repeat(5, 1fr); } }
+  .tile { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; text-align: left; }
+  button.tile:hover { background: var(--card-hover); }
+  .tile .v { font-size: 22px; font-weight: 750; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .tile.warn .v { color: var(--red); }
+  .tile.good .v { color: var(--green); }
+  .tile.busy .v { color: var(--amber); }
+  .tile .skel { display: inline-block; width: 40px; height: 22px; border-radius: 6px; background: var(--border); }
+
+  .alert {
+    display: none; align-items: center; gap: 10px; margin-top: 10px; padding: 10px 14px; border-radius: 10px; font-size: 13px;
+    background: color-mix(in srgb, var(--red) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  }
+  .alert.show { display: flex; }
+  .alert .grow { flex: 1; min-width: 0; }
+
+  /* add bar */
+  .add-bar { margin: 16px 0 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .add-bar .field { flex: 1 1 280px; position: relative; }
   .add-bar input {
-    flex: 1; background: var(--card); border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px 16px; color: var(--text); font-size: 14px; outline: none;
+    width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; font-size: 14px;
   }
+  .add-bar input::placeholder, .search input::placeholder { color: var(--muted); opacity: 1; }
   .add-bar input:focus { border-color: var(--accent); }
-  .add-bar button {
-    background: var(--accent); border: none; border-radius: 10px; color: white;
-    padding: 12px 22px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
-  }
-  .add-bar button:hover { background: var(--accent-hover); }
-  .add-bar button:disabled { opacity: .5; cursor: wait; }
-  #status { margin: 0 32px 4px; font-size: 13px; min-height: 18px; }
+  .add-bar .btn { padding: 12px 18px; font-size: 14px; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+  #status { font-size: 13px; min-height: 20px; padding: 2px 0; }
   #status.ok { color: var(--green); }
   #status.err { color: var(--red); }
 
-  .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 0 32px; gap: 10px; }
-  .toolbar .right { display: flex; gap: 8px; }
-  .toolbar button, .toolbar a {
-    background: none; border: 1px solid var(--border); color: var(--muted);
-    border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; text-decoration: none;
+  /* controls */
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0 6px; }
+  .search { position: relative; flex: 1 1 220px; max-width: 420px; }
+  .search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+  .search input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px 9px 34px; font-size: 14px; }
+  .search input:focus { border-color: var(--accent); }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 999px;
+    padding: 5px 12px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
   }
-  .toolbar button:hover, .toolbar a:hover { color: var(--text); }
+  .pill:hover { color: var(--text); border-color: var(--muted); }
+  .pill[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); border-color: var(--accent); }
+  .pill .n { opacity: .8; font-variant-numeric: tabular-nums; margin-left: 3px; }
+  .controls .spacer { flex: 1; }
   .err-count { color: var(--red); font-weight: 700; }
 
+  /* log */
   #logPanel {
-    margin: 10px 32px 0; background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; max-height: 260px; overflow-y: auto; display: none;
-    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px;
+    margin: 8px 0 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; display: none; overflow: hidden;
   }
   #logPanel.open { display: block; }
-  .log-line { display: flex; gap: 10px; padding: 5px 14px; border-bottom: 1px solid rgba(42,46,59,.5); }
+  .log-bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+  .log-bar .grow { flex: 1; }
+  #logList { max-height: 280px; overflow-y: auto; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+  .log-line { display: flex; gap: 10px; padding: 5px 14px; border-bottom: 1px solid var(--border-soft); }
   .log-line .t { color: var(--muted); flex-shrink: 0; }
+  .log-line .m { min-width: 0; overflow-wrap: anywhere; }
   .log-line.error .m { color: var(--red); }
-  .log-line.info .m { color: var(--text); }
-  .log-empty { padding: 14px; color: var(--muted); }
+  .log-empty { padding: 16px; color: var(--muted); font-size: 13px; }
+  .log-empty.err { color: var(--red); }
 
-  #browsePanel {
-    margin: 10px 32px 0; background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; display: none; max-height: 420px; overflow-y: auto;
-  }
-  #browsePanel.open { display: block; }
-  #browsePanel h3 { font-size: 13px; padding: 14px 16px 6px; color: var(--muted); display:flex; justify-content:space-between; }
-  #browsePanel h3 button { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; }
-  .pl-row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-top: 1px solid rgba(42,46,59,.5); font-size: 13px; }
-  .pl-row img { width: 48px; height: 36px; border-radius: 6px; object-fit: cover; background: var(--border); }
-  .pl-row .t { flex: 1; }
-  .pl-row .c { color: var(--muted); font-size: 12px; }
-  .pl-row button {
-    background: var(--accent); border: none; border-radius: 8px; color: white;
-    padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
-  }
-  .pl-row button:disabled { opacity: .5; }
-
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 18px; padding: 0 32px 20px; }
-  .chan-head {
-    margin: 22px 32px 0; border: 1px solid var(--border); border-radius: 14px;
-    overflow: hidden; background: var(--card);
-  }
+  /* channel groups */
+  #grid { padding-bottom: 40px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 16px; padding: 14px 0 6px; }
+  .chan-head { margin: 22px 0 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--card); }
   .chan-head .banner { width: 100%; height: 84px; object-fit: cover; display: block; }
-  .chan-head .row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
-  .chan-head img.avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--border); }
-  .chan-head .name { font-weight: 700; font-size: 15px; flex: 1; }
-  .chan-head .cnt { color: var(--muted); font-size: 12px; }
-  .chan-head .row { cursor: pointer; }
-  .chan-head.collapsed { opacity: .85; }
-  .chan-head.collapsed:hover { opacity: 1; }
-  .chan-head .caret {
-    border: none; background: none; color: var(--muted);
-    font-size: 14px; padding: 2px 4px; cursor: pointer; flex-shrink: 0;
-  }
-  .chan-head .caret:hover { color: var(--text); }
-  .chan-head button {
-    background: none; border: 1px solid var(--border); color: var(--muted);
-    border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer;
-  }
-  .chan-head button.danger:hover { color: var(--red); border-color: var(--red); }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
-  .card-head { display: flex; gap: 14px; padding: 16px; align-items: flex-start; }
-  .cover { position: relative; width: 72px; height: 72px; flex-shrink: 0; cursor: pointer; }
-  .cover img { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; background: var(--border); display: block; }
+  .chan-head .row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; flex-wrap: wrap; }
+  .chan-head .toggle { display: flex; align-items: center; gap: 10px; flex: 1 1 200px; min-width: 0; background: none; border: none; text-align: left; padding: 2px; }
+  .chan-head img.avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; background: var(--border); flex-shrink: 0; }
+  .chan-head .name { font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chan-head .cnt { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .chan-head .caret { color: var(--muted); transition: transform .15s; }
+  .chan-head .caret.open { transform: rotate(90deg); }
+  .chan-head .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn.danger:hover { color: var(--red); border-color: var(--red); }
+
+  /* cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; box-shadow: var(--shadow); }
+  .card.has-fail { border-color: color-mix(in srgb, var(--red) 45%, var(--border)); }
+  .card-head { display: flex; gap: 14px; padding: 16px 16px 10px; align-items: flex-start; }
+  .cover { position: relative; width: 76px; height: 76px; flex-shrink: 0; border: none; background: none; padding: 0; border-radius: 12px; }
+  .cover img { width: 76px; height: 76px; border-radius: 12px; object-fit: cover; background: var(--border); display: block; }
   .cover .cover-hint {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,.55); border-radius: 12px; color: white; font-size: 18px;
-    opacity: 0; transition: opacity .15s;
+    background: rgba(0,0,0,.6); border-radius: 12px; color: #fff; opacity: 0; transition: opacity .15s;
   }
-  .cover:hover .cover-hint { opacity: 1; }
+  .cover:hover .cover-hint, .cover:focus-visible .cover-hint { opacity: 1; }
   .card-head .info { flex: 1; min-width: 0; }
-  .card-head h2 {
-    font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  }
-  .card-head h2 .rename { cursor: pointer; color: var(--muted); font-size: 13px; margin-left: 6px; border: none; background: none; }
-  .card-head h2 .rename:hover { color: var(--accent); }
-  .orig-name { color: var(--muted); font-size: 11.5px; margin-top: 2px; font-style: italic; }
-  .meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .card-head h2 { font-size: 16px; font-weight: 700; line-height: 1.25; display: flex; gap: 6px; align-items: flex-start; }
+  .card-head h2 .ttl { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; min-width: 0; }
+  .link-btn { background: none; border: none; color: var(--muted); padding: 2px 4px; border-radius: 6px; font-size: 12px; text-decoration: none; }
+  .link-btn:hover { color: var(--accent); }
+  .orig-name { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+  .meta { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
   .badge {
-    font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px;
-    border-radius: 20px; background: rgba(139, 92, 246, .15); color: var(--accent);
+    font-size: 10.5px; font-weight: 750; letter-spacing: .06em; padding: 3px 8px; border-radius: 20px;
+    background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent);
   }
-  .badge.channel { background: rgba(236, 72, 153, .15); color: #ec4899; }
-  .badge.filter { background: rgba(34, 211, 238, .15); color: var(--cyan); }
+  .badge.channel { background: color-mix(in srgb, var(--pink) 16%, transparent); color: var(--pink); }
+  .badge.filter { background: color-mix(in srgb, var(--cyan) 16%, transparent); color: var(--cyan); }
   .ep-count { color: var(--muted); font-size: 12px; }
   .chip {
-    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px;
-    cursor: pointer; color: var(--muted); border: 1px solid var(--border); background: none;
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 20px;
+    color: var(--muted); border: 1px solid var(--border); background: none; text-decoration: none;
   }
-  .chip:hover { color: var(--text); }
-  .chip.on { color: var(--green); border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.08); }
-  .yt-link {
-    font-size: 11px; font-weight: 600; color: #f87171; text-decoration: none;
-    padding: 3px 8px; border: 1px solid rgba(248,113,113,.3); border-radius: 20px;
-  }
-  .yt-link:hover { background: rgba(248,113,113,.12); }
+  .chip:hover { color: var(--text); border-color: var(--muted); }
+  .chip.on { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); background: color-mix(in srgb, var(--green) 10%, transparent); }
+  .chip.yt { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
+  .chip.yt:hover { background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+  .summary { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 10px; }
+  .sbadge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 650; padding: 3px 9px; border-radius: 8px; background: var(--bg2); color: var(--muted); }
+  .sbadge.ok { color: var(--green); } .sbadge.fail { color: var(--red); } .sbadge.busy { color: var(--amber); }
+  .sbadge.fail { background: color-mix(in srgb, var(--red) 12%, transparent); }
 
   .actions { display: flex; gap: 8px; padding: 0 16px 14px; flex-wrap: wrap; }
-  .actions a, .actions button {
-    flex: 1; text-align: center; text-decoration: none; font-size: 12.5px; font-weight: 600;
-    padding: 9px 4px; border-radius: 9px; border: 1px solid var(--border);
-    background: transparent; color: var(--text); cursor: pointer; min-width: 100px;
-  }
-  .actions .apple { background: linear-gradient(135deg, #9333ea, #c026d3); border: none; color: white; }
-  .actions .remote { background: linear-gradient(135deg, #0891b2, #2563eb); border: none; color: white; }
-  .actions .apple:hover, .actions .remote:hover { filter: brightness(1.1); }
-  .actions button:hover { background: var(--card-hover); }
-  .actions .autodl-on { color: var(--green); border-color: rgba(52,211,153,.4); }
+  .actions .btn { flex: 1 1 auto; font-size: 12.5px; padding: 8px 10px; }
+  .actions .apple { background: linear-gradient(135deg, #7c3aed, #c026d3); border-color: transparent; color: #fff; }
+  .actions .remote { background: linear-gradient(135deg, #0e7490, #2563eb); border-color: transparent; color: #fff; }
+  .actions .apple:hover, .actions .remote:hover { filter: brightness(1.12); }
+  .actions .autodl-on { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
   .actions .autodl-off { color: var(--muted); }
-  .actions .del { flex: 0 0 42px; min-width: 42px; color: var(--muted); }
+  .actions .del { flex: 0 0 auto; color: var(--muted); }
   .actions .del:hover { color: var(--red); border-color: var(--red); }
 
   .episodes { border-top: 1px solid var(--border); }
   .episodes h3 {
-    font-size: 11px; letter-spacing: .08em; color: var(--muted); font-weight: 600;
-    text-transform: uppercase; padding: 12px 16px 4px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; letter-spacing: .08em; color: var(--muted); font-weight: 650;
+    text-transform: uppercase; padding: 10px 16px 2px; display: flex; justify-content: space-between; align-items: center;
   }
-  .episodes h3 button { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 11px; font-weight: 600; }
-  .ep { display: flex; align-items: center; gap: 10px; padding: 7px 16px; font-size: 13px; }
+  .episodes h3 button { background: none; border: none; color: var(--accent); font-size: 12px; font-weight: 650; text-transform: none; letter-spacing: 0; }
+  .ep { display: flex; align-items: center; gap: 10px; padding: 7px 16px; font-size: 13px; min-width: 0; }
   .ep:last-child { padding-bottom: 14px; }
-  .ep .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .ep .dot.dl { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,.6); }
-  .ep .dot.nd { background: var(--border); }
-  .ep .dot.dling { background: var(--amber); box-shadow: 0 0 6px rgba(251,191,36,.6); animation: pulse 1.2s infinite; }
-  .ep .dot.fail { background: var(--red); box-shadow: 0 0 6px rgba(248,113,113,.6); }
-  @keyframes pulse { 50% { opacity: .35; } }
-  .ep .title { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); }
-  .ep .date { color: var(--muted); font-size: 11.5px; flex-shrink: 0; }
+  .ep .st { display: inline-flex; align-items: center; justify-content: center; width: 18px; flex-shrink: 0; }
+  .ep .st.dl { color: var(--green); } .ep .st.nd { color: var(--muted); } .ep .st.dling { color: var(--amber); } .ep .st.fail { color: var(--red); }
+  .ep .st.dling svg { animation: spin 1.4s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ep .title { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+  .ep .date { color: var(--muted); font-size: 12px; flex-shrink: 0; }
   .ep-btn {
-    flex-shrink: 0; font-size: 10.5px; font-weight: 600; padding: 4px 10px;
-    border-radius: 7px; border: 1px solid var(--border); background: transparent;
-    cursor: pointer; width: 92px; text-align: center;
+    flex-shrink: 0; font-size: 11.5px; font-weight: 650; padding: 4px 8px; border-radius: 7px;
+    border: 1px solid var(--border); background: transparent; width: 96px; text-align: center;
   }
-  .ep-btn.download { color: var(--accent); border-color: rgba(139,92,246,.4); }
-  .ep-btn.download:hover { background: rgba(139,92,246,.15); }
-  .ep-btn.retry { color: var(--red); border-color: rgba(248,113,113,.4); }
+  .ep-btn.download { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  .ep-btn.download:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .ep-btn.retry { color: var(--red); border-color: color-mix(in srgb, var(--red) 50%, transparent); }
+  .ep-btn.retry:hover { background: color-mix(in srgb, var(--red) 12%, transparent); }
   .ep-btn.delete { color: var(--muted); }
   .ep-btn.delete:hover { color: var(--red); border-color: var(--red); }
-  .ep-btn.busy { color: var(--amber); border-color: rgba(251,191,36,.4); cursor: default; }
+  .ep-btn.busy { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); cursor: default; }
+  .ep-none { padding: 8px 16px 14px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 520px) { .ep .date { display: none; } .ep-btn { width: 84px; } }
 
-  .empty { grid-column: 1/-1; text-align: center; color: var(--muted); padding: 60px 0; }
+  .empty {
+    text-align: center; color: var(--muted); padding: 56px 16px; margin-top: 20px;
+    border: 1px dashed var(--border); border-radius: 16px; background: color-mix(in srgb, var(--card) 60%, transparent);
+  }
+  .empty h2 { color: var(--text); font-size: 17px; margin-bottom: 6px; }
+  .empty p { font-size: 14px; max-width: 520px; margin: 0 auto 14px; }
+  .empty.err h2 { color: var(--red); }
 
   /* modal */
-  #modalWrap {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
-    z-index: 50; align-items: flex-start; justify-content: center; padding: 6vh 16px;
-  }
+  #modalWrap { display: none; position: fixed; inset: 0; background: var(--overlay); z-index: 50; align-items: flex-start; justify-content: center; padding: 6vh 16px; }
   #modalWrap.open { display: flex; }
-  #modal {
-    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-    width: 100%; max-width: 720px; max-height: 84vh; display: flex; flex-direction: column;
-  }
-  #modal .m-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
-  #modal .m-head h2 { font-size: 16px; flex: 1; }
-  #modal .m-head input {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-    padding: 8px 12px; color: var(--text); font-size: 13px; width: 220px; outline: none;
-  }
-  #modal .m-head .close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
-  #modal .m-body { overflow-y: auto; padding: 6px 0 12px; }
+  #modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 720px; max-height: 86vh; display: flex; flex-direction: column; box-shadow: var(--shadow); }
+  #modal .m-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  #modal .m-head h2 { font-size: 16px; flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+  #modal .m-head input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; width: 220px; max-width: 100%; }
+  #modal .m-body { overflow-y: auto; padding: 4px 0 12px; }
   #modal .m-more { text-align: center; padding: 10px; }
-  #modal .m-more button {
-    background: none; border: 1px solid var(--border); color: var(--muted);
-    border-radius: 8px; padding: 6px 18px; cursor: pointer; font-size: 12px;
-  }
-  .series-row { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid rgba(42,46,59,.5); font-size: 13px; }
-  .series-row .t { flex: 1; }
-  .series-row .ex-box { width: 15px; height: 15px; accent-color: var(--cyan); cursor: pointer; flex-shrink: 0; }
+  .pl-row { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-top: 1px solid var(--border-soft); font-size: 13px; }
+  .pl-row img { width: 48px; height: 36px; border-radius: 6px; object-fit: cover; background: var(--border); flex-shrink: 0; }
+  .pl-row .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .pl-row .c { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .m-sec { font-size: 12px; padding: 12px 18px 4px; color: var(--muted); font-weight: 650; }
+  .series-row { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid var(--border-soft); font-size: 13px; }
+  .series-row .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .series-row .ex-box { width: 16px; height: 16px; accent-color: var(--accent-solid); flex-shrink: 0; }
   .series-row .c { color: var(--muted); font-size: 12px; }
-  .series-row button {
-    background: var(--accent); border: none; border-radius: 8px; color: white;
-    padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  .m-custom { display: flex; gap: 8px; padding: 12px 18px; flex-wrap: wrap; align-items: center; }
+  .m-custom input { flex: 1 1 200px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+  .m-custom .note { flex: 1 1 200px; font-size: 12.5px; color: var(--muted); }
+  .m-banner { width: 100%; display: block; max-height: 110px; object-fit: cover; }
+  .m-intro { padding: 10px 18px; font-size: 12.5px; color: var(--muted); }
+
+  #toasts { position: fixed; bottom: 16px; left: 16px; right: 16px; z-index: 80; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+  .toast { pointer-events: auto; max-width: 560px; width: 100%; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 10px 14px; font-size: 13px; box-shadow: var(--shadow); }
+  .toast.err { border-left-color: var(--red); }
+  .toast.ok { border-left-color: var(--green); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   }
-  .m-custom { display: flex; gap: 8px; padding: 12px 18px; }
-  .m-custom input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; outline: none; }
-  .m-custom button { background: var(--accent); border: none; border-radius: 8px; color: white; padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; }
 </style>
 </head>
 <body>
+<div class="wrap">
 <header>
-  <div class="logo">🎙️</div>
+  <div class="logo" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg></div>
   <div>
     <h1>jojo-podcasts</h1>
-    <div class="sub">YouTube → clean podcast feeds, sponsor-free</div>
-    <div id="stats"></div>
+    <div class="sub">YouTube and RSS to clean podcast feeds, sponsor-free</div>
   </div>
-  <a id="remoteLink" href="#" target="_blank">Remote dashboard ↗</a>
+  <div class="head-actions">
+    <a id="remoteLink" class="btn" href="#" target="_blank" rel="noopener" style="display:none">Remote dashboard <svg class="i" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+    <a id="opmlLink" class="btn" href="/opml" download>Export OPML</a>
+    <button class="btn icon" id="themeBtn" onclick="toggleTheme()" aria-label="Switch colour theme" title="Switch colour theme"></button>
+  </div>
 </header>
 
-<div class="add-bar">
-  <input id="input" placeholder="Paste a YouTube playlist/channel URL, playlist ID (PL…), channel ID (UC…), @handle, or a …/playlists URL to browse" onkeydown="if(event.key==='Enter')addPodcast()">
-  <button id="addBtn" onclick="addPodcast()">Add podcast</button>
-  <button style="background:#0891b2" title="List a channel's podcasts & playlists so you can subscribe individually or in bulk" onclick="browsePlaylists(document.getElementById('input').value.trim())">Browse channel</button>
-</div>
-<div id="status"></div>
-<div class="toolbar">
-  <button id="logToggle" onclick="toggleLog()">Activity log <span id="errCount" class="err-count"></span></button>
-  <div class="right">
-    <button onclick="setAllChannels(true)">⊟ Collapse all</button>
-    <button onclick="setAllChannels(false)">⊞ Expand all</button>
-    <a id="opmlLink" href="/opml" download>Export OPML</a>
-    <button onclick="loadAll()">↻ Refresh</button>
-  </div>
-</div>
-<div id="logPanel"></div>
+<section class="tiles" id="tiles" aria-label="Library summary"></section>
+<div class="alert" id="failAlert" role="status"></div>
 
-<div class="grid" id="grid"><div class="empty">Loading…</div></div>
+<form class="add-bar" onsubmit="addPodcast();return false">
+  <div class="field">
+    <label class="sr-only" for="input">YouTube playlist, channel or handle to add</label>
+    <input id="input" autocomplete="off" placeholder="Paste a YouTube playlist or channel URL, an ID (PL.. / UC..) or an @handle">
+  </div>
+  <button type="submit" class="btn primary" id="addBtn">Add podcast</button>
+  <button type="button" class="btn" title="List a channel's podcasts and playlists so you can subscribe individually or in bulk" onclick="browsePlaylists(document.getElementById('input').value.trim())">Browse channel</button>
+</form>
+<div class="hint">Tip: a channel URL ending in /playlists opens the browser. RSS sources are attached per podcast with its Source button.</div>
+<div id="status" role="status" aria-live="polite"></div>
+
+<div class="controls">
+  <div class="search">
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <label class="sr-only" for="search">Filter podcasts</label>
+    <input id="search" type="search" autocomplete="off" placeholder="Filter podcasts by name or channel" oninput="onSearch()">
+  </div>
+  <div class="seg" id="filters" role="group" aria-label="Filter"></div>
+  <div class="spacer"></div>
+  <div class="seg" role="group" aria-label="Group by">
+    <button class="pill" id="gmChannel" aria-pressed="true" onclick="setGroupMode('channel')">By channel</button>
+    <button class="pill" id="gmSub" aria-pressed="false" onclick="setGroupMode('sub')">By subscription</button>
+  </div>
+  <button class="btn sm ghost" onclick="setAllChannels(true)">Collapse all</button>
+  <button class="btn sm ghost" onclick="setAllChannels(false)">Expand all</button>
+  <button class="btn sm" id="logToggle" aria-expanded="false" aria-controls="logPanel" onclick="toggleLog()">Activity log <span id="errCount" class="err-count"></span></button>
+  <button class="btn sm" onclick="loadAll()">Refresh</button>
+</div>
+<div id="logPanel">
+  <div class="log-bar">
+    <span class="grow" id="logInfo"></span>
+    <button class="pill" id="logErrOnly" aria-pressed="false" onclick="toggleLogErrors()">Errors only</button>
+  </div>
+  <div id="logList"></div>
+</div>
+
+<main id="grid"><div class="empty"><p>Loading podcasts...</p></div></main>
+</div>
+
 <input type="file" id="coverFile" accept=".jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadCover(this)">
+<div id="toasts" aria-live="polite"></div>
 
 <div id="modalWrap" onclick="if(event.target===this)closeModal()">
-  <div id="modal">
+  <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="m-head">
       <h2 id="modalTitle"></h2>
-      <input id="modalSearch" placeholder="Search episodes…" style="display:none" onkeydown="if(event.key==='Enter')searchEpisodes()">
-      <button class="close" onclick="closeModal()">✕</button>
+      <label class="sr-only" for="modalSearch">Search episodes</label>
+      <input id="modalSearch" type="search" placeholder="Search episodes..." style="display:none" onkeydown="if(event.key==='Enter')searchEpisodes()">
+      <button class="btn icon ghost" onclick="closeModal()" aria-label="Close dialog"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
     <div class="m-body" id="modalBody"></div>
   </div>
@@ -290,8 +359,55 @@ let coverVersion = Date.now();
 let coverPodcastId = null;
 let collapsed = new Set();
 let groupIds = [];
-try { collapsed = new Set(JSON.parse(localStorage.getItem('jojoCollapsed') || '[]')); } catch (e) {}
+let groupMode = 'channel';   // 'channel' | 'sub'
+let activeFilter = 'all';    // all | sub | unsub | fail | manual
+let logErrorsOnly = false;
+let lastEvents = [];
+let stats = null;
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+try { collapsed = new Set(JSON.parse(lsGet('jojoCollapsed') || '[]')); } catch (e) {}
+if (lsGet('jojoGroup') === 'sub') groupMode = 'sub';
+if (['all', 'sub', 'unsub', 'fail', 'manual'].includes(lsGet('jojoFilter'))) activeFilter = lsGet('jojoFilter');
 
+/* ---- icons (static markup only, never server data) ---- */
+const ICON = {
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  spin: '<path d="M21 12a9 9 0 1 1-6.2-8.55"/>',
+  x: '<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/>',
+  edit: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  chev: '<path d="m9 6 6 6-6 6"/>',
+  trash: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  play: '<path d="M8 5v14l11-7Z"/>',
+  split: '<path d="M6 3v6a4 4 0 0 0 4 4h4a4 4 0 0 1 4 4v4M6 3 3 6M6 3l3 3"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/>',
+  link: '<path d="M7 17 17 7M8 7h9v9"/>',
+  alert: '<path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.01"/>'
+};
+function I(name) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + (ICON[name] || '') + '</svg>'; }
+
+/* ---- theme ---- */
+function effectiveTheme() {
+  const t = document.documentElement.getAttribute('data-theme');
+  if (t === 'light' || t === 'dark') return t;
+  return (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+}
+function paintThemeBtn() {
+  const dark = effectiveTheme() === 'dark';
+  document.getElementById('themeBtn').innerHTML = I(dark ? 'sun' : 'moon');
+  document.getElementById('themeBtn').title = dark ? 'Switch to light theme' : 'Switch to dark theme';
+}
+function toggleTheme() {
+  const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  lsSet('jojoTheme', next);
+  paintThemeBtn();
+}
+
+/* ---- helpers ---- */
 fetch('/api/config' + tok).then(r => r.json()).then(c => {
   publicUrl = c.publicUrl || '';
   sbDefault = c.sbDefault || '';
@@ -299,17 +415,21 @@ fetch('/api/config' + tok).then(r => r.json()).then(c => {
   const link = document.getElementById('remoteLink');
   if (publicUrl && remoteTok) {
     link.href = publicUrl + '/' + remoteTok;
-    link.style.display = 'inline-block';
+    link.style.display = 'inline-flex';
   }
   if (tok) document.getElementById('opmlLink').href = '/opml' + tok;
   load();
 }).catch(() => {});
 
 function fmtDate(iso) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function fmtTime(iso) {
-  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 function ago(unixSec) {
   const s = Math.floor(Date.now() / 1000) - unixSec;
@@ -319,7 +439,7 @@ function ago(unixSec) {
   return Math.round(s / 86400) + 'd ago';
 }
 function esc(s) {
-  return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 // esc() is an HTML-TEXT encoder and is wrong inside an inline event handler:
 // the parser decodes entities in an attribute value before the contents are
@@ -338,27 +458,112 @@ function jsq(v) {
     // what the literal needs, while being inert to the attribute parser.
     .replace(/"/g, '&quot;');
 }
+function toast(msg, kind) {
+  const box = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast ' + (kind || '');
+  el.textContent = msg;   // textContent: never parsed as HTML
+  box.appendChild(el);
+  setTimeout(() => el.remove(), kind === 'err' ? 7000 : 3500);
+}
+// Turn a failed response into a readable sentence (server may send JSON {message} or plain text).
+async function errText(res, fallback) {
+  try {
+    const t = await res.text();
+    try { const j = JSON.parse(t); if (j && j.message) return String(j.message); } catch (e) {}
+    if (t && t.length < 300) return t.trim();
+  } catch (e) {}
+  return fallback + ' (HTTP ' + res.status + ')';
+}
 
+/* ---- episode rows ---- */
+function epState(e) {
+  if (e.downloading) return 'dling';
+  if (e.downloaded) return 'dl';
+  if (e.failedCount > 0) return 'fail';
+  return 'nd';
+}
+const EP_LABEL = { dl: 'Downloaded', dling: 'Downloading', fail: 'Failed', nd: 'Not downloaded' };
+const EP_ICON = { dl: 'check', dling: 'spin', fail: 'alert', nd: 'clock' };
 function epRow(e) {
-  let btn, dotCls;
-  if (e.downloading) { btn = '<button class="ep-btn busy">Downloading…</button>'; dotCls = 'dling'; }
-  else if (e.downloaded) { btn = `<button class="ep-btn delete" onclick="deleteEpisode(${jsq(e.videoId)})">Delete</button>`; dotCls = 'dl'; }
-  else if (e.failedCount > 0) { btn = `<button class="ep-btn retry" title="${e.failedCount} failed attempt(s)" onclick="downloadEpisode(${jsq(e.videoId)}, this)">Retry (${e.failedCount}✗)</button>`; dotCls = 'fail'; }
-  else { btn = `<button class="ep-btn download" onclick="downloadEpisode(${jsq(e.videoId)}, this)">Download</button>`; dotCls = 'nd'; }
+  const st = epState(e);
+  let btn;
+  if (st === 'dling') btn = '<button class="ep-btn busy" disabled>Downloading...</button>';
+  else if (st === 'dl') btn = `<button class="ep-btn delete" onclick="deleteEpisode(${jsq(e.videoId)})">Delete file</button>`;
+  else if (st === 'fail') btn = `<button class="ep-btn retry" title="${esc(e.failedCount)} failed attempt(s)" onclick="downloadEpisode(${jsq(e.videoId)}, this)">Retry (${esc(e.failedCount)}x failed)</button>`;
+  else btn = `<button class="ep-btn download" onclick="downloadEpisode(${jsq(e.videoId)}, this)">Download</button>`;
   return `
     <div class="ep">
-      <div class="dot ${dotCls}"></div>
+      <span class="st ${st}" title="${EP_LABEL[st]}" role="img" aria-label="${EP_LABEL[st]}">${I(EP_ICON[st])}</span>
       <div class="title" title="${esc(e.name)}">${esc(e.name)}</div>
-      <div class="date">${fmtDate(e.publishedDate)}</div>
+      <div class="date">${esc(fmtDate(e.publishedDate))}</div>
       ${btn}
     </div>`;
 }
+function epCounts(p) {
+  const c = { dl: 0, fail: 0, dling: 0, nd: 0 };
+  for (const e of (p.episodes || [])) c[epState(e)]++;
+  return c;
+}
 
+/* ---- summary tiles, filters ---- */
+function renderTiles() {
+  const pods = window._pods || [];
+  const tot = { dl: 0, fail: 0, dling: 0, nd: 0 };
+  for (const p of pods) { const c = epCounts(p); for (const k in tot) tot[k] += c[k]; }
+  const tile = (v, l, cls, filter) => {
+    const inner = `<div class="v">${v}</div><div class="l">${l}</div>`;
+    return filter
+      ? `<button class="tile ${cls}" onclick="setFilter(${jsq(filter)})" title="Show these podcasts">${inner}</button>`
+      : `<div class="tile ${cls}">${inner}</div>`;
+  };
+  const gb = stats ? (stats.storedBytes / 1e9).toFixed(1) + ' GB' : '<span class="skel"></span>';
+  const files = stats ? esc(stats.storedFiles) : '<span class="skel"></span>';
+  const hrs = stats ? (stats.totalSkippedSeconds / 3600).toFixed(1) + ' h' : '<span class="skel"></span>';
+  const loaded = !!window._pods;
+  document.getElementById('tiles').innerHTML =
+    tile(loaded ? pods.length : '-', 'feeds' + (loaded ? ' (' + pods.filter(p => p.subscribed).length + ' subscribed)' : ''), '', '') +
+    tile(files, 'episodes on disk (' + gb.replace(/<[^>]*>/g, '') + ')', 'good', '') +
+    tile(hrs, 'sponsor time skipped', '', '') +
+    tile(loaded ? tot.dling + tot.nd : '-', 'recent episodes pending' + (tot.dling ? ' (' + tot.dling + ' downloading)' : ''), tot.dling ? 'busy' : '', '') +
+    tile(loaded ? tot.fail : '-', 'recent episodes failed', tot.fail ? 'warn' : '', tot.fail ? 'fail' : '');
+  const al = document.getElementById('failAlert');
+  if (tot.fail) {
+    const n = pods.filter(p => epCounts(p).fail > 0).length;
+    al.className = 'alert show';
+    al.innerHTML = `<span style="color:var(--red)">${I('alert')}</span><span class="grow"><b>${tot.fail} recent episode(s) failed to download</b> across ${n} feed(s). Retry them from the episode list, or check the activity log for the reason.</span>` +
+      `<button class="btn sm" onclick="setFilter('fail')">Show them</button><button class="btn sm" onclick="openLog()">Open log</button>`;
+  } else {
+    al.className = 'alert';
+    al.innerHTML = '';
+  }
+}
+const FILTERS = [
+  ['all', 'All', p => true],
+  ['sub', 'Subscribed', p => !!p.subscribed],
+  ['unsub', 'Not subscribed', p => !p.subscribed],
+  ['fail', 'Has failures', p => epCounts(p).fail > 0],
+  ['manual', 'Auto-download off', p => !p.autoDownload]
+];
+function renderFilters() {
+  const pods = window._pods || [];
+  document.getElementById('filters').innerHTML = FILTERS.map(([k, label, fn]) =>
+    `<button class="pill" aria-pressed="${activeFilter === k}" onclick="setFilter(${jsq(k)})">${label}${window._pods ? `<span class="n">${pods.filter(fn).length}</span>` : ''}</button>`).join('');
+  document.getElementById('gmChannel').setAttribute('aria-pressed', groupMode === 'channel');
+  document.getElementById('gmSub').setAttribute('aria-pressed', groupMode === 'sub');
+}
+function setFilter(k) { activeFilter = k; lsSet('jojoFilter', k); renderPods(); }
+function setGroupMode(m) { groupMode = m; lsSet('jojoGroup', m); renderPods(); }
+let searchTimer = null;
+function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(renderPods, 120); }
+function clearFilters() { document.getElementById('search').value = ''; setFilter('all'); }
+
+/* ---- main render ---- */
 async function load() {
   const grid = document.getElementById('grid');
   try {
     const res = await fetch('/api/podcasts' + tok);
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errText(res, 'Could not load podcasts'));
     let pods = await res.json();
     // nest filtered sub-feeds directly after their parent
     const parents = pods.filter(p => !p.parentId);
@@ -368,173 +573,226 @@ async function load() {
       for (const child of pods.filter(p => p.parentId === par.id)) ordered.push(child);
     }
     for (const orphan of pods.filter(p => p.parentId && !parents.some(x => x.id === p.parentId))) ordered.push(orphan);
-    pods = ordered;
-    window._pods = pods;
-    if (!pods.length) {
-      grid.innerHTML = '<div class="empty">No podcasts yet — add one above 👆</div>';
-      return;
-    }
-
-    // group by owning channel (children inherit their parent's channel)
-    const chanOf = p => {
-      if (p.parentId) {
-        const par = pods.find(x => x.id === p.parentId);
-        if (par) return par.channelId || '';
-      }
-      return p.channelId || '';
-    };
-    const groups = new Map();
-    for (const p of pods) {
-      const cid = chanOf(p) || '__ungrouped__';
-      if (!groups.has(cid)) groups.set(cid, []);
-      groups.get(cid).push(p);
-    }
-
-    const renderCard = p => {
-      const feedUrl = location.origin + p.feedPath + tok;
-      const isVirtual = p.type === 'FILTER';
-      const ytId = isVirtual ? p.parentId : p.id;
-      const ytUrl = (p.type === 'CHANNEL') ? 'https://www.youtube.com/channel/' + esc(ytId) : 'https://www.youtube.com/playlist?list=' + esc(ytId);
-      const eps = (p.episodes || []).map(epRow).join('') || '<div class="ep"><div class="title" style="color:var(--muted)">No episodes tracked yet</div></div>';
-      const origLine = p.customName ? `<div class="orig-name">YouTube: ${esc(p.originalName)}</div>` : '';
-      const filterLine = isVirtual
-        ? `<div class="orig-name">${p.titleFilter ? `filter: "${esc(p.titleFilter)}"` : 'everything except'}${p.excludeFilter ? ` · excluding: ${esc(p.excludeFilter.split('|').join(', '))}` : ''}</div>`
-        : '';
-      const badgeCls = isVirtual ? 'filter' : (p.type === 'CHANNEL' ? 'channel' : '');
-      return `
-      <div class="card">
-        <div class="card-head">
-          <div class="cover" title="Click to upload custom cover art" onclick="pickCover(${jsq(p.id)})">
-            <img src="${esc(p.imageUrl.startsWith('/covers/') ? p.imageUrl + '?v=' + coverVersion : p.imageUrl)}" loading="lazy" onerror="this.style.visibility='hidden'">
-            <div class="cover-hint">✎</div>
-          </div>
-          <div class="info">
-            <h2>${esc(p.name)}<button class="rename" title="Rename feed" onclick="renamePodcast(${jsq(p.id)})">✎</button></h2>
-            ${origLine}${filterLine}
-            ${p.imageUrl.startsWith('/covers/') ? `<div class="orig-name"><a href="#" style="color:var(--muted)" onclick="resetCover(${jsq(p.id)});return false">↺ reset cover art</a></div>` : ''}
-            <div class="meta">
-              <span class="badge ${badgeCls}">${p.type}</span>
-              <span class="chip ${p.subscribed ? 'on' : ''}" title="Mark as subscribed on your devices" onclick="toggleSubscribed(${jsq(p.id)}, ${p.subscribed})">${p.subscribed ? '✓ Subscribed' : '○ Not subscribed'}</span>
-              <span class="ep-count">${p.episodeCount} episodes</span>
-              <a class="yt-link" target="_blank" rel="noopener" href="${ytUrl}">▶ YouTube</a>
-              <button class="chip ${p.sbCategories ? 'on' : ''}" title="SponsorBlock categories for this feed" onclick="openSbEditor(${jsq(p.id)})">SB: ${esc(p.sbCategories || sbDefault || 'sponsor')}</button>
-              <button class="chip ${p.adTextStrip ? 'on' : ''}" title="Also transcribe each episode and cut ads the hosts read aloud. Costs a few minutes of CPU per episode." onclick="toggleAdText(${jsq(p.id)}, ${!!p.adTextStrip})">Host ads: ${p.adTextStrip ? 'CUT' : 'keep'}</button>
-              <button class="chip ${p.source === 'rss' ? 'on' : ''}" title="Where episodes are pulled from. RSS strips ads by comparing two downloads of the same episode; YouTube uses SponsorBlock." onclick="openSource(${jsq(p.id)})">Source: ${p.source === 'rss' ? 'RSS' : 'YouTube'}</button>
-              ${!isVirtual ? `<button class="chip" title="Create a filtered sub-feed from a recurring series in this feed" onclick="openSplit(${jsq(p.id)})">⑂ Split</button>` : ''}
-              ${p.lastFeedFetch ? `<span class="ep-count" title="Last time a podcast app fetched this feed">· polled ${ago(p.lastFeedFetch)}</span>` : ''}
-            </div>
-          </div>
-        </div>
-        <div class="actions">
-          <a class="apple" href="podcast://${location.host}${p.feedPath}${tok}">${publicUrl ? 'Subscribe (local)' : 'Subscribe in Apple Podcasts'}</a>
-          ${publicUrl ? `<a class="remote" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${p.feedPath}${remoteTok}">Subscribe (remote)</a>` : ''}
-          <button onclick="copyFeed(${jsq(publicUrl ? publicUrl + p.feedPath + remoteTok : feedUrl)}, this)">Copy RSS URL</button>
-          <button class="${p.autoDownload ? 'autodl-on' : 'autodl-off'}" title="Toggle automatic download of new episodes" onclick="toggleAutoDl(${jsq(p.id)}, ${p.autoDownload})">Auto-DL: ${p.autoDownload ? 'ON' : 'OFF'}</button>
-          <button class="del" title="Remove subscription" onclick="removePodcast(${jsq(p.id)}, ${jsq(p.name)})">✕</button>
-        </div>
-        <div class="episodes">
-          <h3>Recent episodes <button onclick="openBrowser(${jsq(p.id)})">All episodes →</button></h3>
-          ${eps}
-        </div>
-      </div>`;
-    };
-
-    // render: channel header + its grid, ungrouped last
-    const entries = [...groups.entries()].sort((a, b) => {
-      if (a[0] === '__ungrouped__') return 1;
-      if (b[0] === '__ungrouped__') return -1;
-      const an = (a[1][0].channelTitle || ''), bn = (b[1][0].channelTitle || '');
-      return an.localeCompare(bn);
-    });
-    groupIds = entries.map(([cid]) => cid);
-    grid.outerHTML = '<div id="grid"></div>';
-    const root = document.getElementById('grid');
-    root.style.padding = '0';
-    root.innerHTML = entries.map(([cid, list]) => {
-      const first = list.find(p => p.channelTitle) || list[0];
-      const open = !collapsed.has(cid);
-      const caret = `<button class="caret" title="${open ? 'Collapse' : 'Expand'}" onclick="toggleChannel(${jsq(cid)})">${open ? '▾' : '▸'}</button>`;
-      const head = cid === '__ungrouped__'
-        ? `<div class="chan-head${open ? '' : ' collapsed'}"><div class="row" onclick="toggleChannel(${jsq(cid)})">${caret}<div class="name">Other feeds</div><div class="cnt">${list.length} feed(s)</div></div></div>`
-        : `<div class="chan-head${open ? '' : ' collapsed'}">
-             ${open && first.channelBanner ? `<img class="banner" src="${esc(first.channelBanner)}=w1600" onerror="this.style.display='none'">` : ''}
-             <div class="row" onclick="if(!event.target.closest('button,a'))toggleChannel(${jsq(cid)})">
-               ${caret}
-               <img class="avatar" src="${esc(first.channelThumb)}" onerror="this.style.visibility='hidden'">
-               <div class="name">${esc(first.channelTitle || 'Channel')}</div>
-               <div class="cnt">${list.length} feed(s)</div>
-               <a class="yt-link" target="_blank" rel="noopener" href="https://www.youtube.com/channel/${esc(cid)}">▶ Channel</a>
-               <button onclick="browsePlaylists(${jsq(cid)})">＋ Browse channel</button>
-               <button class="danger" onclick="removeChannel(${jsq(cid)}, ${jsq(first.channelTitle || 'this channel')}, ${list.length})">🗑 Remove all</button>
-             </div>
-           </div>`;
-      return head + (open ? `<div class="grid">` + list.map(renderCard).join('') + `</div>` : '');
-    }).join('');
+    window._pods = ordered;
+    renderPods();
   } catch (e) {
-    document.getElementById('grid').innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + '</div>';
+    if (!window._pods) {
+      grid.innerHTML = `<div class="empty err"><h2>Could not load podcasts</h2><p>${esc(e.message)}</p><button class="btn" onclick="loadAll()">Try again</button></div>`;
+    } else {
+      toast('Refresh failed: ' + e.message, 'err');
+    }
   }
+}
+
+function renderCard(p, pods) {
+  const feedUrl = location.origin + p.feedPath + tok;
+  const isVirtual = p.type === 'FILTER';
+  const ytId = isVirtual ? p.parentId : p.id;
+  const ytUrl = (p.type === 'CHANNEL') ? 'https://www.youtube.com/channel/' + esc(ytId) : 'https://www.youtube.com/playlist?list=' + esc(ytId);
+  const img = p.imageUrl || '';
+  const isCustomCover = img.startsWith('/covers/');
+  const eps = (p.episodes || []).map(epRow).join('') || '<div class="ep-none">No episodes tracked yet.</div>';
+  const c = epCounts(p);
+  const origLine = p.customName ? `<div class="orig-name">YouTube: ${esc(p.originalName)}</div>` : '';
+  const filterLine = isVirtual
+    ? `<div class="orig-name">${p.titleFilter ? `filter: "${esc(p.titleFilter)}"` : 'everything except'}${p.excludeFilter ? ` · excluding: ${esc(p.excludeFilter.split('|').join(', '))}` : ''}</div>`
+    : '';
+  const badgeCls = isVirtual ? 'filter' : (p.type === 'CHANNEL' ? 'channel' : '');
+  const sb = p.sbCategories || sbDefault || 'sponsor';
+  return `
+  <article class="card${c.fail ? ' has-fail' : ''}">
+    <div class="card-head">
+      <button class="cover" title="Upload custom cover art" aria-label="Upload custom cover art for ${esc(p.name)}" onclick="pickCover(${jsq(p.id)})">
+        <img src="${esc(isCustomCover ? img + '?v=' + coverVersion : img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+        <span class="cover-hint">${I('edit')}</span>
+      </button>
+      <div class="info">
+        <h2><span class="ttl">${esc(p.name)}</span><button class="link-btn" title="Rename feed" aria-label="Rename feed ${esc(p.name)}" onclick="renamePodcast(${jsq(p.id)})">${I('edit')}</button></h2>
+        ${origLine}${filterLine}
+        ${isCustomCover ? `<div class="orig-name"><button class="link-btn" style="padding:0" onclick="resetCover(${jsq(p.id)})">Reset cover art</button></div>` : ''}
+        <div class="meta">
+          <span class="badge ${badgeCls}">${esc(p.type)}</span>
+          <span class="ep-count">${esc(p.episodeCount)} episodes</span>
+          ${p.lastFeedFetch ? `<span class="ep-count" title="Last time a podcast app fetched this feed">· polled ${esc(ago(p.lastFeedFetch))}</span>` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="summary" aria-label="Recent episode status">
+      ${c.dl ? `<span class="sbadge ok">${I('check')} ${c.dl} downloaded</span>` : ''}
+      ${c.dling ? `<span class="sbadge busy">${I('spin')} ${c.dling} downloading</span>` : ''}
+      ${c.nd ? `<span class="sbadge">${I('clock')} ${c.nd} pending</span>` : ''}
+      ${c.fail ? `<span class="sbadge fail">${I('alert')} ${c.fail} failed</span>` : ''}
+    </div>
+    <div class="summary">
+      <button class="chip ${p.subscribed ? 'on' : ''}" aria-pressed="${!!p.subscribed}" title="Mark as subscribed on your devices" onclick="toggleSubscribed(${jsq(p.id)}, ${!!p.subscribed})">${p.subscribed ? I('check') + ' Subscribed' : 'Not subscribed'}</button>
+      <button class="chip ${p.sbCategories ? 'on' : ''}" title="SponsorBlock categories for this feed" onclick="openSbEditor(${jsq(p.id)})">SponsorBlock: ${esc(sb)}</button>
+      <button class="chip ${p.adTextStrip ? 'on' : ''}" aria-pressed="${!!p.adTextStrip}" title="Also transcribe each episode and cut ads the hosts read aloud. Costs a few minutes of CPU per episode." onclick="toggleAdText(${jsq(p.id)}, ${!!p.adTextStrip})">Host ads: ${p.adTextStrip ? 'cut' : 'keep'}</button>
+      <button class="chip ${p.source === 'rss' ? 'on' : ''}" title="Where episodes are pulled from. RSS strips ads by comparing two downloads of the same episode; YouTube uses SponsorBlock." onclick="openSource(${jsq(p.id)})">Source: ${p.source === 'rss' ? 'RSS' : 'YouTube'}</button>
+      ${!isVirtual ? `<button class="chip" title="Create a filtered sub-feed from a recurring series in this feed" onclick="openSplit(${jsq(p.id)})">${I('split')} Split</button>` : ''}
+      <a class="chip yt" target="_blank" rel="noopener" href="${ytUrl}">${I('play')} YouTube</a>
+    </div>
+    <div class="actions">
+      <a class="btn apple" href="podcast://${esc(location.host)}${esc(p.feedPath)}${esc(tok)}">${publicUrl ? 'Subscribe (local)' : 'Subscribe in Apple Podcasts'}</a>
+      ${publicUrl ? `<a class="btn remote" href="podcast://${esc(publicUrl.replace(/^https?:\/\//,''))}${esc(p.feedPath)}${esc(remoteTok)}">Subscribe (remote)</a>` : ''}
+      <button class="btn" onclick="copyFeed(${jsq(publicUrl ? publicUrl + p.feedPath + remoteTok : feedUrl)}, this)">Copy RSS URL</button>
+      <button class="btn ${p.autoDownload ? 'autodl-on' : 'autodl-off'}" aria-pressed="${!!p.autoDownload}" title="Toggle automatic download of new episodes" onclick="toggleAutoDl(${jsq(p.id)}, ${!!p.autoDownload})">Auto-download: ${p.autoDownload ? 'on' : 'off'}</button>
+      <button class="btn del" title="Remove subscription" aria-label="Remove ${esc(p.name)}" onclick="removePodcast(${jsq(p.id)}, ${jsq(p.name)})">${I('trash')}</button>
+    </div>
+    <div class="episodes">
+      <h3>Recent episodes <button onclick="openBrowser(${jsq(p.id)})">All episodes ${I('chev')}</button></h3>
+      ${eps}
+    </div>
+  </article>`;
+}
+
+function renderPods() {
+  const grid = document.getElementById('grid');
+  renderTiles();
+  renderFilters();
+  const all = window._pods;
+  if (!all) return;
+  if (!all.length) {
+    grid.innerHTML = '<div class="empty"><h2>No podcasts yet</h2><p>Paste a YouTube playlist or channel above and press Add podcast. Use Browse channel to pick from all of a channel\'s playlists at once.</p></div>';
+    return;
+  }
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const filt = FILTERS.find(f => f[0] === activeFilter) || FILTERS[0];
+  const pods = all.filter(p => filt[2](p) &&
+    (!q || (p.name + ' ' + (p.originalName || '') + ' ' + (p.channelTitle || '')).toLowerCase().includes(q)));
+  if (!pods.length) {
+    grid.innerHTML = `<div class="empty"><h2>No podcasts match</h2><p>Nothing matches ${q ? '"' + esc(q) + '"' : ''}${q && activeFilter !== 'all' ? ' with ' : ''}${activeFilter !== 'all' ? 'the "' + esc(filt[1]) + '" filter' : ''}.</p><button class="btn" onclick="clearFilters()">Clear filters</button></div>`;
+    return;
+  }
+
+  // group: by owning channel (children inherit the parent's channel) or by subscription state
+  const chanOf = p => {
+    if (p.parentId) {
+      const par = all.find(x => x.id === p.parentId);
+      if (par) return par.channelId || '';
+    }
+    return p.channelId || '';
+  };
+  const groups = new Map();
+  for (const p of pods) {
+    const cid = groupMode === 'sub' ? (p.subscribed ? 'sub:yes' : 'sub:no') : (chanOf(p) || '__ungrouped__');
+    if (!groups.has(cid)) groups.set(cid, []);
+    groups.get(cid).push(p);
+  }
+  const entries = [...groups.entries()].sort((a, b) => {
+    if (groupMode === 'sub') return a[0] === 'sub:yes' ? -1 : 1;
+    if (a[0] === '__ungrouped__') return 1;
+    if (b[0] === '__ungrouped__') return -1;
+    return (a[1][0].channelTitle || '').localeCompare(b[1][0].channelTitle || '');
+  });
+  groupIds = entries.map(([cid]) => cid);
+  // searching/filtering always shows matches: ignore collapsed state then
+  const forceOpen = !!q || activeFilter !== 'all';
+  grid.innerHTML = entries.map(([cid, list]) => {
+    const first = list.find(p => p.channelTitle) || list[0];
+    const open = forceOpen || !collapsed.has(cid);
+    const toggle = (label, extra) => `<button class="toggle" aria-expanded="${open}" onclick="toggleChannel(${jsq(cid)})"><span class="caret${open ? ' open' : ''}">${I('chev')}</span>${extra || ''}<span class="name">${label}</span><span class="cnt">${list.length} feed(s)</span></button>`;
+    let head;
+    if (groupMode === 'sub') {
+      head = `<section class="chan-head"><div class="row">${toggle(cid === 'sub:yes' ? 'Subscribed' : 'Not subscribed')}</div></section>`;
+    } else if (cid === '__ungrouped__') {
+      head = `<section class="chan-head"><div class="row">${toggle('Other feeds')}</div></section>`;
+    } else {
+      head = `<section class="chan-head">
+        ${open && first.channelBanner ? `<img class="banner" alt="" src="${esc(first.channelBanner)}=w1600" onerror="this.style.display='none'">` : ''}
+        <div class="row">
+          ${toggle(esc(first.channelTitle || 'Channel'), `<img class="avatar" alt="" src="${esc(first.channelThumb)}" onerror="this.style.visibility='hidden'">`)}
+          <div class="tools">
+            <a class="btn sm" target="_blank" rel="noopener" href="https://www.youtube.com/channel/${esc(cid)}">${I('play')} Channel</a>
+            <button class="btn sm" onclick="browsePlaylists(${jsq(cid)})">${I('plus')} Browse channel</button>
+            <button class="btn sm danger" onclick="removeChannel(${jsq(cid)}, ${jsq(first.channelTitle || 'this channel')}, ${list.length})">${I('trash')} Remove all</button>
+          </div>
+        </div>
+      </section>`;
+    }
+    return head + (open ? `<div class="grid">` + list.map(p => renderCard(p, all)).join('') + `</div>` : '');
+  }).join('');
 }
 
 function toggleChannel(cid) {
   if (collapsed.has(cid)) collapsed.delete(cid); else collapsed.add(cid);
-  try { localStorage.setItem('jojoCollapsed', JSON.stringify([...collapsed])); } catch (e) {}
-  load();
+  lsSet('jojoCollapsed', JSON.stringify([...collapsed]));
+  renderPods();
 }
 function setAllChannels(collapse) {
   collapsed = new Set(collapse ? [...groupIds] : []);
-  try { localStorage.setItem('jojoCollapsed', JSON.stringify([...collapsed])); } catch (e) {}
-  load();
+  lsSet('jojoCollapsed', JSON.stringify([...collapsed]));
+  renderPods();
 }
 
 async function removeChannel(channelId, name, count) {
   if (!confirm(`Remove all ${count} feed(s) from "${name}"? Downloaded audio files are kept.`)) return;
   const res = await fetch('/api/channels/' + encodeURIComponent(channelId) + tok, { method: 'DELETE' });
-  if (res.ok) loadAll();
-  else alert('Failed to remove channel feeds');
+  if (res.ok) { toast('Removed feeds from ' + name, 'ok'); loadAll(); }
+  else toast(await errText(res, 'Failed to remove channel feeds'), 'err');
 }
 
+/* ---- activity log ---- */
 async function loadEvents() {
   try {
     const res = await fetch('/api/events' + tok);
     if (!res.ok) return;
-    const events = await res.json();
-    const errs = events.filter(e => e.level === 'error').length;
-    document.getElementById('errCount').textContent = errs ? `(${errs} errors)` : '';
-    const panel = document.getElementById('logPanel');
-    panel.innerHTML = events.length
-      ? events.map(e => `<div class="log-line ${e.level}"><span class="t">${fmtTime(e.time)}</span><span class="m">${esc(e.message)}</span></div>`).join('')
-      : '<div class="log-empty">No activity yet</div>';
+    lastEvents = await res.json();
+    renderLog();
   } catch (e) {}
+}
+function renderLog() {
+  const events = lastEvents || [];
+  const errs = events.filter(e => e.level === 'error').length;
+  document.getElementById('errCount').textContent = errs ? `(${errs} errors)` : '';
+  document.getElementById('logInfo').textContent = events.length ? `${events.length} recent events, ${errs} error(s)` : '';
+  const shown = logErrorsOnly ? events.filter(e => e.level === 'error') : events;
+  document.getElementById('logList').innerHTML = shown.length
+    ? shown.map(e => `<div class="log-line ${e.level === 'error' ? 'error' : 'info'}"><span class="t">${esc(fmtTime(e.time))}</span><span class="m">${esc(e.message)}</span></div>`).join('')
+    : `<div class="log-empty">${logErrorsOnly ? 'No errors. All quiet.' : 'No activity yet.'}</div>`;
+}
+function toggleLogErrors() {
+  logErrorsOnly = !logErrorsOnly;
+  document.getElementById('logErrOnly').setAttribute('aria-pressed', logErrorsOnly);
+  renderLog();
 }
 
 async function loadStats() {
   try {
     const res = await fetch('/api/stats' + tok);
     if (!res.ok) return;
-    const s = await res.json();
-    const gb = (s.storedBytes / 1e9).toFixed(1);
-    const hrs = (s.totalSkippedSeconds / 3600).toFixed(1);
-    document.getElementById('stats').textContent =
-      `${s.storedFiles} episodes on disk · ${gb} GB · SponsorBlock has skipped ${hrs}h of sponsors for you`;
+    stats = await res.json();
+    renderTiles();
   } catch (e) {}
 }
 
 function loadAll() { load(); loadEvents(); loadStats(); }
-function toggleLog() { document.getElementById('logPanel').classList.toggle('open'); }
+function toggleLog() {
+  const open = document.getElementById('logPanel').classList.toggle('open');
+  document.getElementById('logToggle').setAttribute('aria-expanded', open);
+}
+function openLog() {
+  const p = document.getElementById('logPanel');
+  if (!p.classList.contains('open')) toggleLog();
+  logErrorsOnly = true;
+  document.getElementById('logErrOnly').setAttribute('aria-pressed', 'true');
+  renderLog();
+  p.scrollIntoView({ block: 'center' });
+}
 
+/* ---- add / browse ---- */
 async function addPodcast() {
   const input = document.getElementById('input');
   const btn = document.getElementById('addBtn');
   const status = document.getElementById('status');
   const val = input.value.trim();
-  if (!val) return;
+  if (!val) { status.className = 'err'; status.textContent = 'Paste a YouTube playlist or channel URL, ID or @handle first.'; return; }
 
-  // channel playlists URL → browse mode
+  // channel playlists URL -> browse mode
   if (/\/playlists\/?$/.test(val)) return browsePlaylists(val);
 
   btn.disabled = true;
   status.className = '';
-  status.textContent = 'Adding — fetching metadata and episodes from YouTube, this can take a minute…';
+  status.textContent = 'Adding: fetching metadata and episodes from YouTube, this can take a minute...';
   try {
     const res = await fetch('/api/podcasts' + tok, {
       method: 'POST',
@@ -542,9 +800,9 @@ async function addPodcast() {
       body: JSON.stringify({ input: val })
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || 'Failed to add podcast');
+    if (!res.ok) throw new Error(body.message || 'Failed to add podcast (HTTP ' + res.status + ')');
     status.className = 'ok';
-    status.textContent = `Added "${body.name}" ✓ — recent episodes will start downloading automatically`;
+    status.textContent = `Added "${body.name}". Recent episodes will start downloading automatically.`;
     input.value = '';
     loadAll();
   } catch (e) {
@@ -559,25 +817,25 @@ function plRow(pl) {
   const have = (window._pods || []).some(p => p.id === pl.id);
   return `
     <div class="pl-row" data-plid="${esc(pl.id)}">
-      <img src="${esc(pl.thumbnail)}" loading="lazy" onerror="this.style.visibility='hidden'">
+      <img src="${esc(pl.thumbnail)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
       <div class="t">${esc(pl.title)}</div>
-      <div class="c">${pl.count} videos</div>
+      <div class="c">${esc(pl.count)} videos</div>
       ${have
-        ? `<button style="background:none;border:1px solid rgba(52,211,153,.4);color:var(--green)" onclick="removePodcast(${jsq(pl.id)},${jsq(pl.title)})">✓ Subscribed — remove</button>`
-        : `<button onclick="subscribePlaylist(${jsq(pl.id)}, this)">Subscribe</button>`}
+        ? `<button class="btn sm" style="color:var(--green)" onclick="removePodcast(${jsq(pl.id)},${jsq(pl.title)})">Subscribed, remove</button>`
+        : `<button class="btn sm primary" onclick="subscribePlaylist(${jsq(pl.id)}, this)">Subscribe</button>`}
     </div>`;
 }
 
 async function browsePlaylists(url) {
   const status = document.getElementById('status');
-  if (!url) { status.className = 'err'; status.textContent = 'Enter a channel URL, ID, or @handle first'; return; }
+  if (!url) { status.className = 'err'; status.textContent = 'Enter a channel URL, ID, or @handle first.'; return; }
 
   // open the overlay immediately, in view wherever the page is scrolled to
-  document.getElementById('modalTitle').textContent = 'Browsing channel…';
+  document.getElementById('modalTitle').textContent = 'Browsing channel...';
   document.getElementById('modalSearch').style.display = 'none';
   const body = document.getElementById('modalBody');
-  body.innerHTML = '<div class="log-empty">Looking up channel podcasts &amp; playlists…</div>';
-  document.getElementById('modalWrap').classList.add('open');
+  body.innerHTML = '<div class="log-empty">Looking up channel podcasts and playlists...</div>';
+  openModal();
   status.className = '';
   status.textContent = '';
 
@@ -588,7 +846,7 @@ async function browsePlaylists(url) {
       body: JSON.stringify({ input: url })
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || 'Failed to list playlists');
+    if (!res.ok) throw new Error(data.message || 'Failed to list playlists (HTTP ' + res.status + ')');
     const pods = data.podcasts || [], lists = data.playlists || [];
     const have = new Set((window._pods || []).map(p => p.id));
     const newPods = pods.map(p => p.id).filter(id => !have.has(id));
@@ -597,24 +855,25 @@ async function browsePlaylists(url) {
 
     document.getElementById('modalTitle').textContent = data.channelTitle || 'Channel';
     body.innerHTML =
-      (data.channelBanner ? `<img src="${esc(data.channelBanner)}=w1600" style="width:100%;display:block;max-height:110px;object-fit:cover">` : '') +
+      (data.channelBanner ? `<img class="m-banner" alt="" src="${esc(data.channelBanner)}=w1600">` : '') +
       `<div class="pl-row" style="border-top:none;padding:12px 18px;flex-wrap:wrap">
-        <img src="${esc(data.channelThumb)}" style="border-radius:50%;width:44px;height:44px" onerror="this.style.visibility='hidden'">
+        <img src="${esc(data.channelThumb)}" alt="" style="border-radius:50%;width:44px;height:44px" onerror="this.style.visibility='hidden'">
         <div class="t" style="font-weight:700;font-size:15px">${esc(data.channelTitle || 'Channel')}</div>
-        <button onclick="subscribePlaylist(${jsq(data.channelId)}, this)" title="One feed with all channel uploads">Whole channel</button>
-        ${newPods.length ? `<button onclick='subscribeAll(${JSON.stringify(newPods)}, this, "podcasts")'>All podcasts (${newPods.length})</button>` : ''}
-        ${newLists.length ? `<button onclick='subscribeAll(${JSON.stringify(newLists)}, this, "playlists")'>All playlists (${newLists.length})</button>` : ''}
-        ${allIds.length ? `<button onclick='subscribeAll(${JSON.stringify(allIds)}, this, "feeds")'>Everything (${allIds.length})</button>` : ''}
+        <button class="btn sm primary" onclick="subscribePlaylist(${jsq(data.channelId)}, this)" title="One feed with all channel uploads">Whole channel</button>
+        ${newPods.length ? `<button class="btn sm primary" onclick="subscribeAll(${jsq(JSON.stringify(newPods))}, this, 'podcasts')">All podcasts (${newPods.length})</button>` : ''}
+        ${newLists.length ? `<button class="btn sm primary" onclick="subscribeAll(${jsq(JSON.stringify(newLists))}, this, 'playlists')">All playlists (${newLists.length})</button>` : ''}
+        ${allIds.length ? `<button class="btn sm primary" onclick="subscribeAll(${jsq(JSON.stringify(allIds))}, this, 'feeds')">Everything (${allIds.length})</button>` : ''}
       </div>` +
-      (pods.length ? `<h3 style="font-size:12px;padding:12px 18px 4px;color:var(--muted)">🎙️ Podcasts (${pods.length})</h3>` + pods.map(plRow).join('') : '') +
-      (lists.length ? `<h3 style="font-size:12px;padding:12px 18px 4px;color:var(--muted)">📃 Playlists (${lists.length})</h3>` + lists.map(plRow).join('') : '') +
-      (!pods.length && !lists.length ? '<div class="log-empty">No podcasts or playlists on this channel</div>' : '');
+      (pods.length ? `<h3 class="m-sec">Podcasts (${pods.length})</h3>` + pods.map(plRow).join('') : '') +
+      (lists.length ? `<h3 class="m-sec">Playlists (${lists.length})</h3>` + lists.map(plRow).join('') : '') +
+      (!pods.length && !lists.length ? '<div class="log-empty">No podcasts or playlists found on this channel.</div>' : '');
   } catch (e) {
-    body.innerHTML = '<div class="log-empty" style="color:var(--red)">' + esc(e.message) + '</div>';
+    body.innerHTML = '<div class="log-empty err">' + esc(e.message) + '</div>';
   }
 }
 
 async function subscribeAll(ids, btn, label) {
+  if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (e) { return; } }
   const status = document.getElementById('status');
   const what = label || 'items';
   if (!confirm(`Subscribe to all ${ids.length} new ${what}? Each one fetches its full episode list, so this can take a while.`)) return;
@@ -622,7 +881,7 @@ async function subscribeAll(ids, btn, label) {
   let ok = 0, fail = 0;
   for (let i = 0; i < ids.length; i++) {
     status.className = '';
-    status.textContent = `Subscribing ${i + 1} of ${ids.length}… (each feed fetches its full episode list, please wait)`;
+    status.textContent = `Subscribing ${i + 1} of ${ids.length}... (each feed fetches its full episode list, please wait)`;
     const rowBtn = document.querySelector(`.pl-row[data-plid="${CSS.escape(ids[i])}"] button`);
     try {
       const res = await fetch('/api/podcasts' + tok, {
@@ -632,15 +891,15 @@ async function subscribeAll(ids, btn, label) {
       });
       if (!res.ok) throw new Error();
       ok++;
-      if (rowBtn) { rowBtn.textContent = 'Added ✓'; rowBtn.disabled = true; }
+      if (rowBtn) { rowBtn.textContent = 'Added'; rowBtn.disabled = true; }
     } catch (e) {
       fail++;
-      if (rowBtn) rowBtn.textContent = 'Failed ✗';
+      if (rowBtn) rowBtn.textContent = 'Failed';
     }
   }
   status.className = fail ? 'err' : 'ok';
-  status.textContent = `Bulk subscribe done: ${ok} added${fail ? ', ' + fail + ' failed' : ''} ✓`;
-  btn.textContent = 'Done ✓';
+  status.textContent = `Bulk subscribe done: ${ok} added${fail ? ', ' + fail + ' failed' : ''}.`;
+  btn.textContent = 'Done';
   loadAll();
 }
 
@@ -648,7 +907,7 @@ async function subscribeAll(ids, btn, label) {
 function closeBrowse() { closeModal(); }
 async function subscribePlaylist(id, btn) {
   btn.disabled = true;
-  btn.textContent = 'Adding…';
+  btn.textContent = 'Adding...';
   try {
     const res = await fetch('/api/podcasts' + tok, {
       method: 'POST',
@@ -656,15 +915,31 @@ async function subscribePlaylist(id, btn) {
       body: JSON.stringify({ input: id })
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || 'Failed');
-    btn.textContent = 'Added ✓';
+    if (!res.ok) throw new Error(body.message || 'Failed to subscribe (HTTP ' + res.status + ')');
+    btn.textContent = 'Added';
     loadAll();
   } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Subscribe';
-    alert(e.message);
+    toast(e.message, 'err');
   }
 }
+
+/* ---- modal plumbing ---- */
+let lastFocus = null;
+function openModal() {
+  lastFocus = document.activeElement;
+  document.getElementById('modalWrap').classList.add('open');
+  document.getElementById('modal').querySelector('button.close, .m-head button')?.focus();
+}
+function closeModal() {
+  document.getElementById('modalWrap').classList.remove('open');
+  document.getElementById('modalBody').innerHTML = '';
+  if (lastFocus && lastFocus.focus && document.contains(lastFocus)) lastFocus.focus();
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('modalWrap').classList.contains('open')) closeModal();
+});
 
 /* ---- episode browser modal ---- */
 let browserId = null, browserOffset = 0;
@@ -674,8 +949,8 @@ function openBrowser(id) {
   document.getElementById('modalTitle').textContent = p ? p.name : 'Episodes';
   const s = document.getElementById('modalSearch');
   s.style.display = 'inline-block'; s.value = '';
-  document.getElementById('modalBody').innerHTML = '<div class="log-empty">Loading…</div>';
-  document.getElementById('modalWrap').classList.add('open');
+  document.getElementById('modalBody').innerHTML = '<div class="log-empty">Loading...</div>';
+  openModal();
   fetchEpisodes(false);
 }
 function searchEpisodes() { browserOffset = 0; fetchEpisodes(false); }
@@ -683,21 +958,19 @@ async function fetchEpisodes(append) {
   const q = document.getElementById('modalSearch').value.trim();
   const body = document.getElementById('modalBody');
   const res = await fetch(`/api/podcasts/${encodeURIComponent(browserId)}/episodes${tok ? tok + '&' : '?'}q=${encodeURIComponent(q)}&offset=${browserOffset}&limit=50`);
-  if (!res.ok) { body.innerHTML = '<div class="log-empty">Failed to load episodes</div>'; return; }
+  if (!res.ok) { body.innerHTML = '<div class="log-empty err">' + esc(await errText(res, 'Failed to load episodes')) + '</div>'; return; }
   const data = await res.json();
   const rows = (data.episodes || []).map(epRow).join('');
   const shown = browserOffset + (data.episodes || []).length;
-  const more = shown < data.total ? `<div class="m-more"><button onclick="browserOffset=${shown};fetchEpisodes(true)">Load more (${shown}/${data.total})</button></div>` : `<div class="m-more" style="color:var(--muted);font-size:12px">${data.total} episodes</div>`;
+  const more = shown < data.total
+    ? `<div class="m-more"><button class="btn sm" onclick="browserOffset=${shown};fetchEpisodes(true)">Load more (${shown}/${data.total})</button></div>`
+    : `<div class="m-more" style="color:var(--muted);font-size:12px">${esc(data.total)} episodes</div>`;
   if (append) {
     body.querySelector('.m-more')?.remove();
     body.insertAdjacentHTML('beforeend', rows + more);
   } else {
-    body.innerHTML = (rows || '<div class="log-empty">No matching episodes</div>') + more;
+    body.innerHTML = (rows || '<div class="log-empty">No matching episodes.</div>') + more;
   }
-}
-function closeModal() {
-  document.getElementById('modalWrap').classList.remove('open');
-  document.getElementById('modalBody').innerHTML = '';
 }
 
 /* ---- split (filtered sub-feed) ---- */
@@ -706,36 +979,34 @@ async function openSplit(id) {
   document.getElementById('modalTitle').textContent = 'Split "' + (p ? p.name : '') + '" into a filtered feed';
   document.getElementById('modalSearch').style.display = 'none';
   const body = document.getElementById('modalBody');
-  body.innerHTML = '<div class="log-empty">Detecting recurring series…</div>';
-  document.getElementById('modalWrap').classList.add('open');
+  body.innerHTML = '<div class="log-empty">Detecting recurring series...</div>';
+  openModal();
   const res = await fetch(`/api/podcasts/${encodeURIComponent(id)}/series` + tok);
   const series = res.ok ? await res.json() : [];
   window._series = series || [];
   const rows = (series || []).map((s, i) => `
     <div class="series-row">
-      <input type="checkbox" class="ex-box" id="ex${i}" data-name="${esc(s.name)}" checked title="Include in the 'everything else' exclusions">
-      <div class="t">${esc(s.name)}</div>
-      <div class="c">${s.count} episodes</div>
-      <button onclick="createSplit(${jsq(id)}, ${jsq(s.name)}, this)">Create feed</button>
+      <input type="checkbox" class="ex-box" id="ex${i}" data-name="${esc(s.name)}" checked aria-label="Exclude ${esc(s.name)} from the everything-else feed" title="Include in the 'everything else' exclusions">
+      <label class="t" for="ex${i}">${esc(s.name)}</label>
+      <div class="c">${esc(s.count)} episodes</div>
+      <button class="btn sm primary" onclick="createSplit(${jsq(id)}, ${jsq(s.name)}, this)">Create feed</button>
     </div>`).join('');
   body.innerHTML =
     `<div class="m-custom">
-       <input id="customFilter" placeholder="…or type a custom title filter (case-insensitive substring)">
-       <button onclick="createSplit(${jsq(id)}, document.getElementById('customFilter').value, this)">Create feed</button>
+       <input id="customFilter" aria-label="Custom title filter" placeholder="...or type a custom title filter (case-insensitive substring)">
+       <button class="btn sm primary" onclick="createSplit(${jsq(id)}, document.getElementById('customFilter').value, this)">Create feed</button>
      </div>` +
     ((series || []).length
-      ? `<div class="m-custom" style="border-top:1px solid var(--border);align-items:center">
-           <div style="flex:1;font-size:12.5px;color:var(--muted)">
-             Or make an <b style="color:var(--text)">“everything else”</b> feed — the full show with the ticked series below removed.
-           </div>
-           <button style="background:var(--cyan);color:#06202a" onclick="createInverse(${jsq(id)}, this)">⊘ Everything else</button>
+      ? `<div class="m-custom" style="border-top:1px solid var(--border)">
+           <div class="note">Or make an <b style="color:var(--text)">"everything else"</b> feed: the full show with the ticked series below removed.</div>
+           <button class="btn sm" onclick="createInverse(${jsq(id)}, this)">Everything else</button>
          </div>` : '') +
-    (rows || '<div class="log-empty">No recurring series detected — use a custom filter above</div>');
+    (rows || '<div class="log-empty">No recurring series detected. Use a custom filter above.</div>');
 }
 
 async function createInverse(parentId, btn) {
   const boxes = [...document.querySelectorAll('.ex-box')].filter(b => b.checked);
-  if (!boxes.length) { alert('Tick at least one series to exclude'); return; }
+  if (!boxes.length) { toast('Tick at least one series to exclude.', 'err'); return; }
   const exclude = boxes.map(b => b.dataset.name);
   btn.disabled = true;
   const res = await fetch(`/api/podcasts/${encodeURIComponent(parentId)}/split` + tok, {
@@ -744,13 +1015,13 @@ async function createInverse(parentId, btn) {
     body: JSON.stringify({ exclude })
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) { btn.disabled = false; alert(body.message || 'Failed to create feed'); return; }
+  if (!res.ok) { btn.disabled = false; toast(body.message || 'Failed to create feed', 'err'); return; }
   closeModal();
   loadAll();
 }
 async function createSplit(parentId, filter, btn) {
   filter = (filter || '').trim();
-  if (!filter) return;
+  if (!filter) { toast('Enter a title filter first.', 'err'); return; }
   btn.disabled = true;
   const res = await fetch(`/api/podcasts/${encodeURIComponent(parentId)}/split` + tok, {
     method: 'POST',
@@ -758,7 +1029,7 @@ async function createSplit(parentId, filter, btn) {
     body: JSON.stringify({ filter })
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) { btn.disabled = false; alert(body.message || 'Failed to create filtered feed'); return; }
+  if (!res.ok) { btn.disabled = false; toast(body.message || 'Failed to create filtered feed', 'err'); return; }
   closeModal();
   loadAll();
 }
@@ -772,12 +1043,13 @@ async function uploadCover(input) {
   const res = await fetch('/api/podcasts/' + encodeURIComponent(coverPodcastId) + '/cover' + tok, { method: 'POST', body: fd });
   input.value = '';
   if (res.ok) { coverVersion = Date.now(); loadAll(); }
-  else { const b = await res.json().catch(() => ({})); alert(b.message || 'Failed to upload cover art'); }
+  else toast(await errText(res, 'Failed to upload cover art'), 'err');
 }
 async function resetCover(id) {
   if (!confirm('Revert to the original YouTube cover art?')) return;
   const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + '/cover' + tok, { method: 'DELETE' });
   if (res.ok) { coverVersion = Date.now(); loadAll(); }
+  else toast(await errText(res, 'Failed to reset cover art'), 'err');
 }
 async function patchPodcast(id, payload) {
   const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, {
@@ -786,7 +1058,7 @@ async function patchPodcast(id, payload) {
     body: JSON.stringify(payload)
   });
   if (res.ok) loadAll();
-  else alert('Update failed');
+  else toast(await errText(res, 'Update failed'), 'err');
 }
 async function renamePodcast(id) {
   const p = (window._pods || []).find(x => x.id === id);
@@ -814,7 +1086,7 @@ async function openSource(id) {
   if (!p) return;
   const feed = prompt(
     'RSS feed for this podcast.\n\n' +
-    'An Apple Podcasts link or a smart link (lnk.to) works too — it will be resolved.\n' +
+    'An Apple Podcasts link or a smart link (lnk.to) works too, it will be resolved.\n' +
     'Leave blank to detach the feed and go back to YouTube.',
     p.feedUrl || '');
   if (feed === null) return;
@@ -824,7 +1096,7 @@ async function openSource(id) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ feedUrl: feed.trim() })
   });
-  if (!res.ok) { alert('Could not attach that feed: ' + (await res.text())); return; }
+  if (!res.ok) { toast('Could not attach that feed: ' + await errText(res, 'rejected'), 'err'); return; }
 
   if (feed.trim()) {
     const useRss = confirm(
@@ -837,7 +1109,7 @@ async function openSource(id) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: useRss ? 'rss' : 'youtube' })
     });
-    if (!res.ok) { alert('Could not switch source: ' + (await res.text())); return; }
+    if (!res.ok) { toast('Could not switch source: ' + await errText(res, 'rejected'), 'err'); return; }
   }
   loadAll();
 }
@@ -853,9 +1125,9 @@ function openSbEditor(id) {
     custom: list.filter(c => !std.includes(c)),
     usingDefault: !(p && p.sbCategories)
   };
-  document.getElementById('modalTitle').textContent = 'SponsorBlock — ' + (p ? p.name : '');
+  document.getElementById('modalTitle').textContent = 'SponsorBlock: ' + (p ? p.name : '');
   document.getElementById('modalSearch').style.display = 'none';
-  document.getElementById('modalWrap').classList.add('open');
+  openModal();
   renderSbEditor();
 }
 
@@ -863,19 +1135,19 @@ function renderSbEditor() {
   const rows = SB_STANDARD.map(([key, desc]) => sbRow(key, desc, false)).join('') +
     sbState.custom.map(key => sbRow(key, 'Custom category', true)).join('');
   document.getElementById('modalBody').innerHTML = `
-    <div style="padding:10px 18px;font-size:12.5px;color:var(--muted)">
+    <div class="m-intro">
       Toggle which segments yt-dlp removes for this feed.
       ${sbState.usingDefault ? `Currently inheriting the global default (<b style="color:var(--text)">${esc(sbDefault || 'sponsor')}</b>).` : ''}
     </div>
     ${rows}
     <div class="m-custom" style="border-top:1px solid var(--border)">
-      <input id="sbNew" placeholder="Add a custom category (e.g. poi_highlight)" onkeydown="if(event.key==='Enter')addSbCustom()">
-      <button onclick="addSbCustom()">Add</button>
+      <input id="sbNew" aria-label="Custom category" placeholder="Add a custom category (e.g. poi_highlight)" onkeydown="if(event.key==='Enter')addSbCustom()">
+      <button class="btn sm" onclick="addSbCustom()">Add</button>
     </div>
     <div class="m-custom" style="border-top:1px solid var(--border)">
-      <div style="flex:1;font-size:12px;color:var(--muted)">Selected: ${esc([...sbState.selected].join(', ')) || 'none (nothing will be cut)'}</div>
-      <button style="background:none;border:1px solid var(--border);color:var(--muted)" onclick="saveSb(true)">Use global default</button>
-      <button onclick="saveSb(false)">Save</button>
+      <div class="note">Selected: ${esc([...sbState.selected].join(', ')) || 'none (nothing will be cut)'}</div>
+      <button class="btn sm" onclick="saveSb(true)">Use global default</button>
+      <button class="btn sm primary" onclick="saveSb(false)">Save</button>
     </div>`;
 }
 
@@ -883,15 +1155,15 @@ function sbRow(key, desc, isCustom) {
   const on = sbState.selected.has(key);
   return `
     <div class="series-row">
-      <input type="checkbox" class="ex-box" ${on ? 'checked' : ''} onchange="toggleSb(${jsq(key)})">
-      <div class="t">
+      <input type="checkbox" class="ex-box" id="sb_${esc(key)}" ${on ? 'checked' : ''} onchange="toggleSb(${jsq(key)})">
+      <label class="t" for="sb_${esc(key)}">
         <span style="font-weight:600;color:${isCustom ? 'var(--amber)' : 'var(--text)'}">${esc(key)}</span>
-        ${isCustom ? '<span class="badge" style="margin-left:6px;background:rgba(251,191,36,.15);color:var(--amber)">CUSTOM</span>' : ''}
-        <div style="font-size:11.5px;color:var(--muted)">${esc(desc)}</div>
-      </div>
+        ${isCustom ? '<span class="badge" style="margin-left:6px;background:color-mix(in srgb,var(--amber) 16%,transparent);color:var(--amber)">CUSTOM</span>' : ''}
+        <div style="font-size:12px;color:var(--muted)">${esc(desc)}</div>
+      </label>
       ${isCustom
-        ? `<button style="background:none;border:1px solid var(--border);color:var(--muted)" title="Remove this custom category" onclick="removeSbCustom(${jsq(key)})">✕</button>`
-        : `<span class="c" title="Standard category — can be toggled but not removed">standard</span>`}
+        ? `<button class="btn sm" title="Remove this custom category" aria-label="Remove ${esc(key)}" onclick="removeSbCustom(${jsq(key)})">${I('trash')}</button>`
+        : `<span class="c" title="Standard category: can be toggled but not removed">standard</span>`}
     </div>`;
 }
 
@@ -926,32 +1198,33 @@ function toggleAutoDl(id, current) { patchPodcast(id, { autoDownload: !current }
 function toggleAdText(id, current) { patchPodcast(id, { adTextStrip: !current }); }
 
 async function downloadEpisode(videoId, btn) {
-  btn.textContent = 'Starting…';
+  btn.textContent = 'Starting...';
   btn.className = 'ep-btn busy';
   const res = await fetch('/api/episodes/' + encodeURIComponent(videoId) + '/download' + tok, { method: 'POST' });
-  if (!res.ok) alert('Failed to start download');
+  if (!res.ok) toast(await errText(res, 'Failed to start download'), 'err');
   setTimeout(loadAll, 2000);
 }
 async function deleteEpisode(videoId) {
   if (!confirm('Delete the downloaded audio file for this episode? It can be re-downloaded any time.')) return;
   const res = await fetch('/api/episodes/' + encodeURIComponent(videoId) + '/file' + tok, { method: 'DELETE' });
   if (res.ok) loadAll();
-  else alert('Failed to delete file');
+  else toast(await errText(res, 'Failed to delete file'), 'err');
 }
 async function removePodcast(id, name) {
   if (!confirm(`Remove "${name}" from jojo-podcasts? Downloaded audio files are kept.`)) return;
   const res = await fetch('/api/podcasts/' + encodeURIComponent(id) + tok, { method: 'DELETE' });
   if (res.ok) loadAll();
-  else alert('Failed to remove podcast');
+  else toast(await errText(res, 'Failed to remove podcast'), 'err');
 }
 function copyFeed(url, btn) {
-  navigator.clipboard.writeText(url).then(() => {
-    const old = btn.textContent;
-    btn.textContent = 'Copied ✓';
-    setTimeout(() => btn.textContent = old, 1500);
-  });
+  const done = () => { const old = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = old, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, () => toast('Copy blocked by the browser. Long-press the Subscribe link instead.', 'err'));
+  else toast('Copy needs HTTPS or localhost in this browser.', 'err');
 }
 
+paintThemeBtn();
+renderFilters();
+renderTiles();
 loadAll();
 setInterval(loadAll, 20000);
 </script>
