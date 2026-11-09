@@ -61,14 +61,17 @@ func GetChannelData(dbPodcast *models.Podcast, channelIdentifier string, isPlayl
 		channel := channelResponse.Items[0]
 
 		imageUrl := ""
-		if channel.Snippet.Thumbnails.Maxres != nil {
-			imageUrl = channel.Snippet.Thumbnails.Maxres.Url
-		} else if channel.Snippet.Thumbnails.Standard != nil {
-			imageUrl = channel.Snippet.Thumbnails.Standard.Url
-		} else if channel.Snippet.Thumbnails.High != nil {
-			imageUrl = channel.Snippet.Thumbnails.High.Url
-		} else if channel.Snippet.Thumbnails.Default != nil {
-			imageUrl = channel.Snippet.Thumbnails.Default.Url
+		// The API can omit thumbnails entirely; dereferencing them panicked.
+		if th := channel.Snippet.Thumbnails; th != nil {
+			if th.Maxres != nil {
+				imageUrl = th.Maxres.Url
+			} else if th.Standard != nil {
+				imageUrl = th.Standard.Url
+			} else if th.High != nil {
+				imageUrl = th.High.Url
+			} else if th.Default != nil {
+				imageUrl = th.Default.Url
+			}
 		}
 
 		// For a playlist feed, prefer the playlist's own title, description

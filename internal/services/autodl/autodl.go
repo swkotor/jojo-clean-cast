@@ -118,7 +118,7 @@ func Download(videoId, episodeName string) {
 		return
 	}
 	if database.FileExistsWithId(audioDirAbs, videoId) {
-		failures.Delete(videoId)
+		ClearFailure(videoId)
 		events.Info("Download finished: %s", name)
 	} else {
 		recordFailure(videoId)
@@ -146,6 +146,10 @@ func ClearFailure(videoId string) {
 	failures.Delete(videoId)
 }
 
+// queueMu serialises every queue, so two clicks (or download-all followed by
+// retry-all) wait their turn instead of running side by side.
+var queueMu sync.Mutex
+
 // DownloadQueue downloads the episodes one after another in the background.
 // One at a time keeps yt-dlp, the transcriber and the disk from being hit by
 // many large downloads at once.
@@ -154,6 +158,8 @@ func DownloadQueue(eps []models.PodcastEpisode) {
 		return
 	}
 	go func() {
+		queueMu.Lock()
+		defer queueMu.Unlock()
 		for _, ep := range eps {
 			Download(ep.YoutubeVideoId, ep.EpisodeName)
 		}

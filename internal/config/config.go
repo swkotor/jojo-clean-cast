@@ -118,8 +118,10 @@ func Load() (*Config, error) {
 	}
 
 	AppConfig = &cfg
-	if AppConfig.Ytdlp.CookiesFile != "" {
-		AppConfig.Ytdlp.CookiesFile = path.Join(AppConfig.Setup.ConfigDir, AppConfig.Ytdlp.CookiesFile)
+	// A relative COOKIES_FILE is taken from the config dir; an absolute one is
+	// used as given. Joining an absolute path onto the config dir mangled it.
+	if c := AppConfig.Ytdlp.CookiesFile; c != "" && !path.IsAbs(c) {
+		AppConfig.Ytdlp.CookiesFile = path.Join(AppConfig.Setup.ConfigDir, c)
 	}
 	AppConfig.Setup.DbFile = path.Join(AppConfig.Setup.ConfigDir, "sqlite.db")
 	if envAudioDir := os.Getenv("AUDIO_DIR"); envAudioDir != "" {
