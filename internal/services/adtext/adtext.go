@@ -203,7 +203,10 @@ var sponsorPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bbrought to you by\b`),
 	regexp.MustCompile(`(?i)\b(this episode|today's episode) is (supported|sponsored)\b`),
 	regexp.MustCompile(`(?i)\bthanks? to our (sponsor|supporters)\b`),
-	regexp.MustCompile(`(?i)\b(membership|members)\b|\bmerch (store|shop)\b`),
+	// "members" and "membership" alone are the show's own plugs ("Club members
+	// can hear that episode now") and are not cut on their own. A priced
+	// membership pitch still qualifies through its price or patreon wording.
+	regexp.MustCompile(`(?i)\bmerch (store|shop)\b`),
 	// The tail of a membership pitch ("at our higher tiers you'll also get...")
 	// carries no URL and no sponsor noun, so without this the span stopped
 	// short and left the last few seconds of the ad in.
