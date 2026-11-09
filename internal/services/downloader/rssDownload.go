@@ -363,6 +363,18 @@ func stripHostReadAds(ep *models.PodcastEpisode, p *models.Podcast, file string)
 			spans = append([]adtext.Span{{Start: 0, End: n, Reason: "foreign-language pre-roll"}}, spans...)
 		}
 	}
+	// Host-read ads the rules missed: a local model reads the transcript. Only
+	// confident, plausible cuts are added. A model error keeps the rule cuts.
+	if llmCfg := adtext.LLMConfigFromEnv(); llmCfg.URL != "" {
+		llmSpans, problems := adtext.LLMSpans(llmCfg, segs, total, opts)
+		for _, msg := range problems {
+			events.Error("Model pass on %s: %s", ep.EpisodeName, msg)
+		}
+		if len(llmSpans) > 0 {
+			events.Info("Model added %d ad span(s) to %s", len(llmSpans), ep.EpisodeName)
+		}
+		spans = adtext.MergeLLM(spans, llmSpans)
+	}
 	// Mark done either way: a clean episode must not be transcribed again on
 	// every pass just because nothing was found.
 	database.MarkAdTextDone(ep.YoutubeVideoId, adtext.RulesRevision)
